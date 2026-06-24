@@ -1,6 +1,7 @@
 import { Notice, TFile, Vault } from "obsidian";
 import { CONFLICT_DIR } from "./defaults";
 import { CryptoService } from "./crypto";
+import { t } from "./i18n";
 import { SyncApi } from "./api";
 import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState } from "./types";
@@ -21,7 +22,7 @@ export class SyncEngine {
       return;
     }
     if (!this.crypto.isUnlocked()) {
-      new Notice("Zero Knowledge Sync: unlock the vault password first.");
+      new Notice(t(this.settings.language, "notice.unlockFirst"));
       return;
     }
 
@@ -33,7 +34,7 @@ export class SyncEngine {
       this.settings.lastSync = new Date().toISOString();
       await saveSyncState(this.vault, state);
       await this.saveSettings();
-      new Notice("Zero Knowledge Sync complete.");
+      new Notice(t(this.settings.language, "notice.syncComplete"));
     } finally {
       this.running = false;
     }
@@ -153,7 +154,7 @@ export class SyncEngine {
       await this.vault.create(conflictPath, remote.content);
     }
     if (response.conflicts.length > 0) {
-      new Notice(`Zero Knowledge Sync: ${response.conflicts.length} conflict copy created.`);
+      new Notice(t(this.settings.language, "notice.conflicts", { count: response.conflicts.length }));
     }
   }
 

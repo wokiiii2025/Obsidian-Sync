@@ -2,8 +2,9 @@ import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { DEFAULT_SETTINGS } from "./defaults";
+import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
-import type { PluginSettings } from "./types";
+import type { Language, PluginSettings } from "./types";
 
 export default class ZeroKnowledgeSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -16,15 +17,15 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.addSettingTab(new SyncSettingTab(this.app, this));
     this.addCommand({
       id: "zero-knowledge-sync-now",
-      name: "Sync now",
+      name: t(this.settings.language, "command.syncNow"),
       callback: () => this.syncNow()
     });
     this.addCommand({
       id: "zero-knowledge-sync-lock",
-      name: "Lock sync password",
+      name: t(this.settings.language, "command.lock"),
       callback: () => {
         this.crypto.lock();
-        new Notice("Zero Knowledge Sync locked.");
+        new Notice(t(this.settings.language, "notice.locked"));
       }
     });
     this.configureInterval();
@@ -47,7 +48,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async unlock(password: string): Promise<void> {
     await this.crypto.unlock(password);
-    new Notice("Zero Knowledge Sync unlocked.");
+    new Notice(t(this.settings.language, "notice.unlocked"));
   }
 
   async syncNow(): Promise<void> {
@@ -65,7 +66,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     }
     const seconds = Math.max(10, this.settings.syncIntervalSeconds);
     this.intervalId = window.setInterval(() => {
-      this.syncNow().catch((error) => new Notice(`Zero Knowledge Sync failed: ${error.message}`));
+      this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
     }, seconds * 1000);
   }
 }
@@ -80,10 +81,26 @@ class SyncSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    const language = this.plugin.settings.language;
 
     new Setting(containerEl)
-      .setName("Server URL")
-      .setDesc("Sync API base URL.")
+      .setName(t(language, "settings.language.name"))
+      .setDesc(t(language, "settings.language.desc"))
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("en", t(language, "settings.language.en"))
+          .addOption("zh", t(language, "settings.language.zh"))
+          .setValue(language)
+          .onChange(async (value) => {
+            this.plugin.settings.language = value as Language;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.serverUrl.name"))
+      .setDesc(t(language, "settings.serverUrl.desc"))
       .addText((text) =>
         text
           .setPlaceholder("http://127.0.0.1:8080")
@@ -95,8 +112,8 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Vault ID")
-      .setDesc("Filled after registration. Keep this to log in on another device.")
+      .setName(t(language, "settings.vaultId.name"))
+      .setDesc(t(language, "settings.vaultId.desc"))
       .addText((text) =>
         text
           .setPlaceholder("UUID")
@@ -108,11 +125,11 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Vault password")
-      .setDesc("Used locally for encryption and server login.")
+      .setName(t(language, "settings.password.name"))
+      .setDesc(t(language, "settings.password.desc"))
       .addText((text) =>
         text
-          .setPlaceholder("Password")
+          .setPlaceholder(t(language, "settings.password.placeholder"))
           .setValue(this.password)
           .onChange((value) => {
             this.password = value;
@@ -120,38 +137,38 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Register this vault")
-      .setDesc("Creates a new server vault and stores the returned token.")
+      .setName(t(language, "settings.register.name"))
+      .setDesc(t(language, "settings.register.desc"))
       .addButton((button) =>
-        button.setButtonText("Register").setCta().onClick(async () => {
+        button.setButtonText(t(language, "settings.register.button")).setCta().onClick(async () => {
           await this.register();
         })
       );
 
     new Setting(containerEl)
-      .setName("Login this device")
-      .setDesc("Use an existing vault ID and password to register this device.")
+      .setName(t(language, "settings.login.name"))
+      .setDesc(t(language, "settings.login.desc"))
       .addButton((button) =>
-        button.setButtonText("Login").onClick(async () => {
+        button.setButtonText(t(language, "settings.login.button")).onClick(async () => {
           await this.login();
         })
       );
 
     new Setting(containerEl)
-      .setName("Unlock encryption")
-      .setDesc("Derives the local encryption key for this Obsidian session.")
+      .setName(t(language, "settings.unlock.name"))
+      .setDesc(t(language, "settings.unlock.desc"))
       .addButton((button) =>
-        button.setButtonText("Unlock").onClick(async () => {
+        button.setButtonText(t(language, "settings.unlock.button")).onClick(async () => {
           await this.withPassword(() => this.plugin.unlock(this.password));
         })
       );
 
     new Setting(containerEl)
-      .setName("Sync mode")
+      .setName(t(language, "settings.syncMode.name"))
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("manual", "Manual only")
-          .addOption("periodic", "Periodic")
+          .addOption("manual", t(language, "settings.syncMode.manual"))
+          .addOption("periodic", t(language, "settings.syncMode.periodic"))
           .setValue(this.plugin.settings.syncMode)
           .onChange(async (value) => {
             this.plugin.settings.syncMode = value as PluginSettings["syncMode"];
@@ -160,8 +177,8 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Sync interval")
-      .setDesc("Seconds. Used only in periodic mode.")
+      .setName(t(language, "settings.interval.name"))
+      .setDesc(t(language, "settings.interval.desc"))
       .addText((text) =>
         text
           .setPlaceholder("30")
@@ -173,8 +190,8 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Exclusions")
-      .setDesc("One path or simple folder pattern per line.")
+      .setName(t(language, "settings.exclusions.name"))
+      .setDesc(t(language, "settings.exclusions.desc"))
       .addTextArea((text) =>
         text
           .setValue(this.plugin.settings.exclusions)
@@ -185,10 +202,10 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Manual sync")
-      .setDesc(`Last sync: ${this.plugin.settings.lastSync || "never"}`)
+      .setName(t(language, "settings.manual.name"))
+      .setDesc(t(language, "settings.manual.desc", { time: this.plugin.settings.lastSync || t(language, "settings.manual.never") }))
       .addButton((button) =>
-        button.setButtonText("Sync now").setCta().onClick(async () => {
+        button.setButtonText(t(language, "settings.manual.button")).setCta().onClick(async () => {
           await this.plugin.syncNow();
           this.display();
         })
@@ -203,7 +220,7 @@ class SyncSettingTab extends PluginSettingTab {
       this.plugin.settings.token = response.token;
       await this.plugin.unlock(this.password);
       await this.plugin.saveSettings();
-      new Notice("Zero Knowledge Sync registered.");
+      new Notice(t(this.plugin.settings.language, "notice.registered"));
       this.display();
     });
   }
@@ -211,14 +228,14 @@ class SyncSettingTab extends PluginSettingTab {
   private async login(): Promise<void> {
     await this.withPassword(async () => {
       if (!this.plugin.settings.vaultId) {
-        throw new Error("Vault ID is required");
+        throw new Error(t(this.plugin.settings.language, "error.vaultIdRequired"));
       }
       const response = await this.plugin.api.login(this.plugin.settings.vaultId, this.password, this.deviceName(), this.platform());
       this.plugin.settings.deviceId = response.device_id;
       this.plugin.settings.token = response.token;
       await this.plugin.unlock(this.password);
       await this.plugin.saveSettings();
-      new Notice("Zero Knowledge Sync logged in.");
+      new Notice(t(this.plugin.settings.language, "notice.loggedIn"));
       this.display();
     });
   }
@@ -226,12 +243,12 @@ class SyncSettingTab extends PluginSettingTab {
   private async withPassword(action: () => Promise<void>): Promise<void> {
     try {
       if (!this.password) {
-        throw new Error("Password is required");
+        throw new Error(t(this.plugin.settings.language, "error.passwordRequired"));
       }
       await action();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      new Notice(`Zero Knowledge Sync: ${message}`);
+      new Notice(t(this.plugin.settings.language, "notice.prefix", { message }));
     }
   }
 

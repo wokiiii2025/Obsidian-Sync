@@ -1,6 +1,7 @@
 import type { PluginSettings, SyncState } from "./types";
 
 export const DEFAULT_SETTINGS: PluginSettings = {
+  language: "en",
   serverUrl: "http://127.0.0.1:8080",
   vaultId: "",
   deviceId: "",

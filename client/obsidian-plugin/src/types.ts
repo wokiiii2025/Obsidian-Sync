@@ -1,6 +1,8 @@
 export type SyncMode = "manual" | "periodic";
+export type Language = "en" | "zh";
 
 export interface PluginSettings {
+  language: Language;
   serverUrl: string;
   vaultId: string;
   deviceId: string;
