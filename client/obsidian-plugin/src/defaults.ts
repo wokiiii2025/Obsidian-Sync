@@ -10,7 +10,17 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncIntervalSeconds: 30,
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
-  lastSync: ""
+  lastSync: "",
+  lastSyncStatus: "idle",
+  lastSyncStats: {
+    trackedNotes: 0,
+    downloaded: 0,
+    uploaded: 0,
+    conflicts: 0,
+    lastStartedAt: "",
+    lastFinishedAt: "",
+    lastError: ""
+  }
 };
 
 export const DEFAULT_STATE: SyncState = {

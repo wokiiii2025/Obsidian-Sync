@@ -21,20 +21,40 @@ export class SyncEngine {
     if (this.running) {
       return;
     }
+    this.settings.lastSyncStats.lastStartedAt = new Date().toISOString();
+    this.settings.lastSyncStats.lastError = "";
     if (!this.crypto.isUnlocked()) {
+      this.settings.lastSyncStatus = "locked";
+      this.settings.lastSyncStats.lastFinishedAt = new Date().toISOString();
+      await this.saveSettings();
       new Notice(t(this.settings.language, "notice.unlockFirst"));
       return;
     }
 
     this.running = true;
+    this.settings.lastSyncStatus = "running";
+    this.settings.lastSyncStats.downloaded = 0;
+    this.settings.lastSyncStats.uploaded = 0;
+    this.settings.lastSyncStats.conflicts = 0;
+    await this.saveSettings();
     try {
       const state = await loadSyncState(this.vault);
       await this.applyRemoteChanges(state);
       await this.pushLocalChanges(state);
       this.settings.lastSync = new Date().toISOString();
+      this.settings.lastSyncStatus = "success";
+      this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length;
+      this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
       await saveSyncState(this.vault, state);
       await this.saveSettings();
       new Notice(t(this.settings.language, "notice.syncComplete"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.settings.lastSyncStatus = "error";
+      this.settings.lastSyncStats.lastError = message;
+      this.settings.lastSyncStats.lastFinishedAt = new Date().toISOString();
+      await this.saveSettings();
+      throw error;
     } finally {
       this.running = false;
     }
@@ -42,6 +62,7 @@ export class SyncEngine {
 
   private async applyRemoteChanges(state: SyncState): Promise<void> {
     const changes = await this.api.changes(this.settings.lastSync);
+    this.settings.lastSyncStats.downloaded = changes.length;
     for (const change of changes) {
       if (!change.path_hash) {
         continue;
@@ -144,6 +165,8 @@ export class SyncEngine {
     }
 
     const response = await this.api.push(changes);
+    this.settings.lastSyncStats.uploaded = response.accepted.length;
+    this.settings.lastSyncStats.conflicts = response.conflicts.length;
     for (const conflict of response.conflicts) {
       if (!conflict.encrypted_content || !conflict.encrypted_dek) {
         continue;

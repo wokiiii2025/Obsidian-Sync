@@ -210,6 +210,26 @@ class SyncSettingTab extends PluginSettingTab {
           this.display();
         })
       );
+
+    const stats = this.plugin.settings.lastSyncStats;
+    const status = t(language, `settings.status.${this.plugin.settings.lastSyncStatus}`);
+    new Setting(containerEl)
+      .setName(t(language, "settings.status.name"))
+      .setDesc(t(language, "settings.status.desc", { status }));
+    new Setting(containerEl)
+      .setName(t(language, "settings.stats.tracked", { count: stats.trackedNotes }))
+      .setDesc(t(language, "settings.stats.uploaded", { count: stats.uploaded }));
+    new Setting(containerEl)
+      .setName(t(language, "settings.stats.downloaded", { count: stats.downloaded }))
+      .setDesc(t(language, "settings.stats.conflicts", { count: stats.conflicts }));
+    new Setting(containerEl)
+      .setName(t(language, "settings.stats.started", { time: stats.lastStartedAt || t(language, "settings.stats.none") }))
+      .setDesc(t(language, "settings.stats.finished", { time: stats.lastFinishedAt || t(language, "settings.stats.none") }));
+    if (stats.lastError) {
+      new Setting(containerEl)
+        .setName(t(language, "settings.stats.error", { message: stats.lastError }))
+        .setDesc("");
+    }
   }
 
   private async register(): Promise<void> {

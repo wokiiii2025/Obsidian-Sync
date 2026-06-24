@@ -44,7 +44,22 @@ type TranslationKey =
   | "settings.manual.name"
   | "settings.manual.desc"
   | "settings.manual.never"
-  | "settings.manual.button";
+  | "settings.manual.button"
+  | "settings.status.name"
+  | "settings.status.desc"
+  | "settings.status.idle"
+  | "settings.status.running"
+  | "settings.status.success"
+  | "settings.status.error"
+  | "settings.status.locked"
+  | "settings.stats.tracked"
+  | "settings.stats.uploaded"
+  | "settings.stats.downloaded"
+  | "settings.stats.conflicts"
+  | "settings.stats.started"
+  | "settings.stats.finished"
+  | "settings.stats.error"
+  | "settings.stats.none";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -91,7 +106,22 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.manual.name": "Manual sync",
     "settings.manual.desc": "Last sync: {time}",
     "settings.manual.never": "never",
-    "settings.manual.button": "Sync now"
+    "settings.manual.button": "Sync now",
+    "settings.status.name": "Sync status",
+    "settings.status.desc": "{status}",
+    "settings.status.idle": "Idle",
+    "settings.status.running": "Running",
+    "settings.status.success": "Success",
+    "settings.status.error": "Error",
+    "settings.status.locked": "Locked",
+    "settings.stats.tracked": "Tracked notes: {count}",
+    "settings.stats.uploaded": "Uploaded last run: {count}",
+    "settings.stats.downloaded": "Downloaded last run: {count}",
+    "settings.stats.conflicts": "Conflicts last run: {count}",
+    "settings.stats.started": "Last started: {time}",
+    "settings.stats.finished": "Last finished: {time}",
+    "settings.stats.error": "Last error: {message}",
+    "settings.stats.none": "none"
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -137,7 +167,22 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.manual.name": "手动同步",
     "settings.manual.desc": "上次同步：{time}",
     "settings.manual.never": "从未",
-    "settings.manual.button": "立即同步"
+    "settings.manual.button": "立即同步",
+    "settings.status.name": "同步状态",
+    "settings.status.desc": "{status}",
+    "settings.status.idle": "空闲",
+    "settings.status.running": "同步中",
+    "settings.status.success": "成功",
+    "settings.status.error": "失败",
+    "settings.status.locked": "未解锁",
+    "settings.stats.tracked": "已跟踪笔记：{count}",
+    "settings.stats.uploaded": "上次上传：{count}",
+    "settings.stats.downloaded": "上次下载：{count}",
+    "settings.stats.conflicts": "上次冲突：{count}",
+    "settings.stats.started": "上次开始：{time}",
+    "settings.stats.finished": "上次结束：{time}",
+    "settings.stats.error": "最近错误：{message}",
+    "settings.stats.none": "无"
   }
 };
 

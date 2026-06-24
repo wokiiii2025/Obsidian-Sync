@@ -1,5 +1,16 @@
 export type SyncMode = "manual" | "periodic";
 export type Language = "en" | "zh";
+export type SyncStatus = "idle" | "running" | "success" | "error" | "locked";
+
+export interface SyncStats {
+  trackedNotes: number;
+  downloaded: number;
+  uploaded: number;
+  conflicts: number;
+  lastStartedAt: string;
+  lastFinishedAt: string;
+  lastError: string;
+}
 
 export interface PluginSettings {
   language: Language;
@@ -12,6 +23,8 @@ export interface PluginSettings {
   conflictMode: "auto" | "manual";
   exclusions: string;
   lastSync: string;
+  lastSyncStatus: SyncStatus;
+  lastSyncStats: SyncStats;
 }
 
 export interface SyncStateEntry {
