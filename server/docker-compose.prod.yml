@@ -1,0 +1,20 @@
+services:
+  sync-api:
+    build:
+      context: ./sync-api
+      dockerfile: Dockerfile
+    container_name: obsidian-sync-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgresql:5432/${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      HERMES_API_KEY: ${HERMES_API_KEY}
+    ports:
+      - "${API_BIND:-0.0.0.0:46990}:8000"
+    networks:
+      - onepanel
+    restart: unless-stopped
+
+networks:
+  onepanel:
+    external: true
+    name: 1panel-network

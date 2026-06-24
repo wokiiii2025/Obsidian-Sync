@@ -1,0 +1,7 @@
+asyncpg>=0.29,<1
+fastapi>=0.111,<1
+passlib[argon2]>=1.7,<2
+PyJWT[crypto]>=2.10,<3
+pydantic-settings>=2.5,<3
+SQLAlchemy>=2.0,<3
+uvicorn[standard]>=0.31,<1

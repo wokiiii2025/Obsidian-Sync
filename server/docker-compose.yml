@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: obsidian-sync-db
+    environment:
+      POSTGRES_DB: obsidian_sync
+      POSTGRES_USER: syncuser
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syncuser -d obsidian_sync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sync-api:
+    build:
+      context: ./sync-api
+      dockerfile: Dockerfile
+    container_name: obsidian-sync-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://syncuser:${DB_PASSWORD}@postgres:5432/obsidian_sync
+      JWT_SECRET: ${JWT_SECRET}
+      HERMES_API_KEY: ${HERMES_API_KEY}
+    ports:
+      - "127.0.0.1:8080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: obsidian-sync-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - sync-api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

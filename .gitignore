@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Obsidian local state
+.obsidian/
+.obsidian-conflicts/
+
+# Build caches
+.DS_Store
+Thumbs.db

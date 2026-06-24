@@ -1,0 +1,23 @@
+{
+  "name": "obsidian-zero-knowledge-sync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end encrypted Obsidian sync plugin.",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.23.0",
+    "obsidian": "^1.5.12",
+    "tslib": "^2.6.3",
+    "typescript": "^5.5.3"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^1.3.0",
+    "@noble/hashes": "^1.4.0"
+  }
+}
