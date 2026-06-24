@@ -19,6 +19,8 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Configurable attachment management with automatic link rewriting.
 - Custom attachment type folder mappings.
 - Orphan attachment scanning.
+- First-run confirmation before organizing existing attachments.
+- Confirmed orphan cleanup to the system trash.
 
 ## Attachment Management
 
@@ -56,7 +58,7 @@ Built-in type folders:
 
 When a note references `![[photo.png]]` or `![photo](photo.png)`, and the file is moved to a managed attachment path, the plugin rewrites the reference to the final path.
 
-The settings page also includes an orphan attachment scan. It checks the configured attachment folder and reports attachments that are not referenced by any Markdown note.
+On first use, the plugin prompts before organizing existing unmanaged attachments. The settings page also includes manual organize, orphan scan, and confirmed cleanup actions. Cleanup moves orphan files to the system trash instead of permanently deleting them.
 
 ## Useful Future Extensions
 

@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { DEFAULT_SETTINGS } from "./defaults";
@@ -15,6 +15,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   syncPromise: Promise<void> | null = null;
   queuedAutoSync = false;
   organizingAttachmentPaths = new Set<string>();
+  bulkAttachmentOrganizing = false;
   statusBarEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -59,6 +60,10 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     });
     this.registerFileWatchers();
     this.configureInterval();
+    const initialAttachmentTimer = window.setTimeout(() => {
+      this.promptInitialAttachmentOrganization().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+    }, 1500);
+    this.register(() => window.clearTimeout(initialAttachmentTimer));
   }
 
   onunload(): void {
@@ -114,6 +119,67 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     return orphanAttachments;
   }
 
+  async organizeExistingAttachments(): Promise<number> {
+    const files = this.unmanagedAttachmentFiles();
+    let organized = 0;
+    this.bulkAttachmentOrganizing = true;
+    try {
+      for (const file of files) {
+        const current = this.app.vault.getAbstractFileByPath(file.path);
+        if (current instanceof TFile && current.extension !== "md") {
+          await this.organizeAttachment(current);
+          organized += 1;
+        }
+      }
+    } finally {
+      this.bulkAttachmentOrganizing = false;
+    }
+    this.settings.attachmentMigrationPrompted = true;
+    this.settings.lastAttachmentMigrationAt = new Date().toISOString();
+    await this.saveSettings();
+    new Notice(t(this.settings.language, "notice.attachmentsOrganized", { count: organized }));
+    if (organized > 0) {
+      this.scheduleAutoSync();
+    }
+    return organized;
+  }
+
+  async cleanupOrphanAttachments(): Promise<number> {
+    const orphanPaths = await this.scanOrphanAttachments();
+    if (orphanPaths.length === 0) {
+      return 0;
+    }
+    return new Promise((resolve) => {
+      new ConfirmModal(
+        this.app,
+        t(this.settings.language, "modal.cleanup.title"),
+        t(this.settings.language, "modal.cleanup.desc", { count: orphanPaths.length }),
+        t(this.settings.language, "modal.cleanup.confirm"),
+        t(this.settings.language, "modal.cancel"),
+        async () => {
+          let cleaned = 0;
+          for (const path of orphanPaths) {
+            const file = this.app.vault.getAbstractFileByPath(path);
+            if (file instanceof TFile) {
+              await this.app.vault.trash(file, true);
+              cleaned += 1;
+            }
+          }
+          this.settings.orphanAttachments = [];
+          this.settings.lastAttachmentCleanupAt = new Date().toISOString();
+          await this.saveSettings();
+          new Notice(t(this.settings.language, "notice.orphanCleanupComplete", { count: cleaned }));
+          resolve(cleaned);
+        },
+        () => resolve(0)
+      ).open();
+    });
+  }
+
+  countUnmanagedAttachments(): number {
+    return this.unmanagedAttachmentFiles().length;
+  }
+
   async syncNow(): Promise<void> {
     if (this.syncPromise) {
       return this.syncPromise;
@@ -157,6 +223,9 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   private handleVaultChange(file: TAbstractFile, oldPath?: string): void {
+    if (this.bulkAttachmentOrganizing) {
+      return;
+    }
     this.organizeAttachment(file, oldPath).catch((error) => {
       new Notice(t(this.settings.language, "notice.prefix", { message: error.message }));
     });
@@ -171,6 +240,39 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       return false;
     }
     return !this.isExcludedPath(file.path);
+  }
+
+  private async promptInitialAttachmentOrganization(): Promise<void> {
+    if (!this.settings.manageAttachments || this.settings.attachmentMigrationPrompted) {
+      return;
+    }
+    const files = this.unmanagedAttachmentFiles();
+    if (files.length === 0) {
+      this.settings.attachmentMigrationPrompted = true;
+      await this.saveSettings();
+      return;
+    }
+    new ConfirmModal(
+      this.app,
+      t(this.settings.language, "modal.organize.title"),
+      t(this.settings.language, "modal.organize.desc", { count: files.length }),
+      t(this.settings.language, "modal.organize.confirm"),
+      t(this.settings.language, "modal.cancel"),
+      async () => {
+        await this.organizeExistingAttachments();
+      },
+      async () => {
+        this.settings.attachmentMigrationPrompted = true;
+        await this.saveSettings();
+      }
+    ).open();
+  }
+
+  private unmanagedAttachmentFiles(): TFile[] {
+    return this.app.vault.getFiles()
+      .filter((file) => file.extension !== "md")
+      .filter((file) => !this.isExcludedPath(file.path))
+      .filter((file) => !this.isInAttachmentFolder(file.path));
   }
 
   private async organizeAttachment(file: TAbstractFile, oldPath?: string): Promise<void> {
@@ -188,7 +290,9 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       const sourcePath = oldPath ?? file.path;
       await this.app.vault.rename(file, targetPath);
       await this.rewriteAttachmentReferences(sourcePath, targetPath);
-      new Notice(t(this.settings.language, "notice.attachmentMoved", { path: targetPath }));
+      if (!this.bulkAttachmentOrganizing) {
+        new Notice(t(this.settings.language, "notice.attachmentMoved", { path: targetPath }));
+      }
     } finally {
       this.organizingAttachmentPaths.delete(file.path);
       this.organizingAttachmentPaths.delete(targetPath);
@@ -540,6 +644,28 @@ class SyncSettingTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl)
+      .setName(t(language, "settings.migration.name"))
+      .setDesc(t(language, "settings.migration.desc", {
+        time: this.plugin.settings.lastAttachmentMigrationAt || t(language, "settings.stats.none")
+      }))
+      .addButton((button) =>
+        button.setButtonText(t(language, "settings.migration.button")).onClick(() => {
+          const count = this.plugin.countUnmanagedAttachments();
+          new ConfirmModal(
+            this.app,
+            t(language, "modal.organize.title"),
+            t(language, "modal.organize.desc", { count }),
+            t(language, "modal.organize.confirm"),
+            t(language, "modal.cancel"),
+            async () => {
+              await this.plugin.organizeExistingAttachments();
+              this.display();
+            }
+          ).open();
+        })
+      );
+
     const orphanCount = this.plugin.settings.orphanAttachments?.length ?? 0;
     new Setting(containerEl)
       .setName(t(language, "settings.orphans.name"))
@@ -550,6 +676,12 @@ class SyncSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText(t(language, "settings.orphans.button")).onClick(async () => {
           await this.plugin.scanOrphanAttachments();
+          this.display();
+        })
+      )
+      .addButton((button) =>
+        button.setButtonText(t(language, "settings.orphans.cleanup")).onClick(async () => {
+          await this.plugin.cleanupOrphanAttachments();
           this.display();
         })
       );
@@ -668,6 +800,52 @@ class SyncSettingTab extends PluginSettingTab {
 
   private platform(): string {
     return "obsidian";
+  }
+}
+
+class ConfirmModal extends Modal {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly title: string,
+    private readonly description: string,
+    private readonly confirmLabel: string,
+    private readonly cancelLabel: string,
+    private readonly onConfirm: () => Promise<void> | void,
+    private readonly onCancel: () => Promise<void> | void = () => undefined
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: this.title });
+    contentEl.createEl("p", { text: this.description });
+    new Setting(contentEl)
+      .addButton((button) =>
+        button.setButtonText(this.cancelLabel).onClick(async () => {
+          this.settled = true;
+          await this.onCancel();
+          this.close();
+        })
+      )
+      .addButton((button) =>
+        button.setButtonText(this.confirmLabel).setCta().onClick(async () => {
+          this.settled = true;
+          await this.onConfirm();
+          this.close();
+        })
+      );
+  }
+
+  onClose(): void {
+    if (!this.settled) {
+      this.settled = true;
+      void this.onCancel();
+    }
+    this.contentEl.empty();
   }
 }
 

@@ -21,7 +21,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     "video: mp4, mov, mkv, webm, avi",
     "archives: zip, rar, 7z, tar, gz"
   ].join("\n"),
+  attachmentMigrationPrompted: false,
+  lastAttachmentMigrationAt: "",
   lastOrphanScanAt: "",
+  lastAttachmentCleanupAt: "",
   orphanAttachments: [],
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",

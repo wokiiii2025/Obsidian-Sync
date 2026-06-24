@@ -14,6 +14,8 @@ This is the client-side plugin for the sync server in `../../server`.
 - Optional managed attachment folder with automatic note link rewriting.
 - Custom attachment type folder mappings.
 - Orphan attachment scanning.
+- First-run prompt for organizing existing unmanaged attachments.
+- Confirmed orphan cleanup to the system trash.
 
 ## Basic Usage
 
@@ -47,6 +49,8 @@ Required files:
 ## Attachment Settings
 
 The plugin can manage attachment locations automatically. When enabled, non-Markdown files are moved into the configured attachment folder and note references are rewritten.
+
+On first use, if unmanaged attachments already exist in the vault, the plugin shows a confirmation prompt before moving anything. You can also run the same action later from the settings page with **Organize existing attachments**.
 
 Supported reference styles:
 
@@ -117,6 +121,8 @@ If an extension appears in multiple mappings, the first matching mapping wins.
 ## Orphan Attachments
 
 The settings page includes an orphan attachment scan. It checks files under the configured attachment folder and reports attachments that are not referenced by Markdown or wiki links in any note.
+
+Cleanup requires a second confirmation and moves orphan attachments to the system trash instead of permanently deleting them.
 
 ## Notes
 

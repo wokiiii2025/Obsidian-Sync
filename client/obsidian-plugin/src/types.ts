@@ -32,7 +32,10 @@ export interface PluginSettings {
   attachmentOrganizationMode: AttachmentOrganizationMode;
   attachmentDateFormat: string;
   attachmentTypeMappings: string;
+  attachmentMigrationPrompted: boolean;
+  lastAttachmentMigrationAt: string;
   lastOrphanScanAt: string;
+  lastAttachmentCleanupAt: string;
   orphanAttachments: string[];
   conflictMode: "auto" | "manual";
   exclusions: string;

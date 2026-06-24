@@ -58,9 +58,13 @@ type TranslationKey =
   | "settings.attachmentDateFormat.desc"
   | "settings.attachmentTypeMappings.name"
   | "settings.attachmentTypeMappings.desc"
+  | "settings.migration.name"
+  | "settings.migration.desc"
+  | "settings.migration.button"
   | "settings.orphans.name"
   | "settings.orphans.desc"
   | "settings.orphans.button"
+  | "settings.orphans.cleanup"
   | "settings.orphans.none"
   | "settings.history.name"
   | "settings.history.desc"
@@ -91,7 +95,16 @@ type TranslationKey =
   | "statusbar.short"
   | "notice.autoSyncQueued"
   | "notice.attachmentMoved"
-  | "notice.orphanScanComplete";
+  | "notice.attachmentsOrganized"
+  | "notice.orphanScanComplete"
+  | "notice.orphanCleanupComplete"
+  | "modal.organize.title"
+  | "modal.organize.desc"
+  | "modal.organize.confirm"
+  | "modal.cleanup.title"
+  | "modal.cleanup.desc"
+  | "modal.cleanup.confirm"
+  | "modal.cancel";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -152,9 +165,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.attachmentDateFormat.desc": "Used by date-based modes. Supports YYYY, MM, and DD.",
     "settings.attachmentTypeMappings.name": "Attachment type folders",
     "settings.attachmentTypeMappings.desc": "One mapping per line, for example: images: png, jpg, webp.",
+    "settings.migration.name": "Organize existing attachments",
+    "settings.migration.desc": "Last organized: {time}. Moves unmanaged attachments into the configured folder and rewrites note links.",
+    "settings.migration.button": "Organize",
     "settings.orphans.name": "Orphan attachments",
     "settings.orphans.desc": "Last scan: {time}. Orphans found: {count}.",
     "settings.orphans.button": "Scan",
+    "settings.orphans.cleanup": "Clean up",
     "settings.orphans.none": "No orphan attachments found.",
     "settings.history.name": "Sync history",
     "settings.history.desc": "{time} - {status} - uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}",
@@ -185,7 +202,16 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.short": "{tracked}",
     "notice.autoSyncQueued": "Sync queued after file changes.",
     "notice.attachmentMoved": "Attachment moved to {path}.",
-    "notice.orphanScanComplete": "Orphan scan complete. Found {count} attachment(s)."
+    "notice.attachmentsOrganized": "Organized {count} existing attachment(s).",
+    "notice.orphanScanComplete": "Orphan scan complete. Found {count} attachment(s).",
+    "notice.orphanCleanupComplete": "Moved {count} orphan attachment(s) to trash.",
+    "modal.organize.title": "Organize existing attachments?",
+    "modal.organize.desc": "Found {count} unmanaged attachment(s). They will be moved into the configured attachment folder and note links will be rewritten.",
+    "modal.organize.confirm": "Organize",
+    "modal.cleanup.title": "Clean up orphan attachments?",
+    "modal.cleanup.desc": "Found {count} orphan attachment(s). They will be moved to the system trash.",
+    "modal.cleanup.confirm": "Clean up",
+    "modal.cancel": "Cancel"
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -245,9 +271,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.attachmentDateFormat.desc": "用于按日期分组，支持 YYYY、MM、DD。",
     "settings.attachmentTypeMappings.name": "附件类型目录映射",
     "settings.attachmentTypeMappings.desc": "每行一个映射，例如：images: png, jpg, webp。",
+    "settings.migration.name": "整理已有附件",
+    "settings.migration.desc": "上次整理：{time}。会把未统一管理的附件移动到配置目录，并改写笔记引用。",
+    "settings.migration.button": "整理",
     "settings.orphans.name": "孤立附件",
     "settings.orphans.desc": "上次扫描：{time}。发现孤立附件：{count} 个。",
     "settings.orphans.button": "扫描",
+    "settings.orphans.cleanup": "清理",
     "settings.orphans.none": "未发现孤立附件。",
     "settings.history.name": "同步历史",
     "settings.history.desc": "{time} - {status} - 上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}",
@@ -278,7 +308,16 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.short": "{tracked}",
     "notice.autoSyncQueued": "已在文件变化后加入同步队列。",
     "notice.attachmentMoved": "附件已移动到 {path}。",
-    "notice.orphanScanComplete": "孤立附件扫描完成，发现 {count} 个。"
+    "notice.attachmentsOrganized": "已整理 {count} 个已有附件。",
+    "notice.orphanScanComplete": "孤立附件扫描完成，发现 {count} 个。",
+    "notice.orphanCleanupComplete": "已将 {count} 个孤立附件移入回收站。",
+    "modal.organize.title": "是否整理已有附件？",
+    "modal.organize.desc": "发现 {count} 个未统一管理的附件。确认后会移动到配置的附件目录，并改写笔记引用。",
+    "modal.organize.confirm": "整理",
+    "modal.cleanup.title": "是否清理孤立附件？",
+    "modal.cleanup.desc": "发现 {count} 个孤立附件。确认后会移动到系统回收站。",
+    "modal.cleanup.confirm": "清理",
+    "modal.cancel": "取消"
   }
 };
 
