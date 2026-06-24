@@ -4,7 +4,7 @@ import { CryptoService } from "./crypto";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
-import type { Language, PluginSettings } from "./types";
+import type { AttachmentOrganizationMode, Language, PluginSettings } from "./types";
 
 export default class ZeroKnowledgeSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -145,7 +145,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     if (this.organizingAttachmentPaths.has(file.path) || this.isExcludedPath(file.path) || this.isInAttachmentFolder(file.path)) {
       return;
     }
-    const attachmentFolder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
+    const attachmentFolder = this.targetAttachmentFolder(file);
     await this.ensureVaultFolder(attachmentFolder);
     const targetPath = await this.uniqueAttachmentPath(`${attachmentFolder}/${file.name}`);
     this.organizingAttachmentPaths.add(file.path);
@@ -175,6 +175,19 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   private isInAttachmentFolder(path: string): boolean {
     const folder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
     return path === folder || path.startsWith(`${folder}/`);
+  }
+
+  private targetAttachmentFolder(file: TFile): string {
+    const baseFolder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
+    const mode = this.settings.attachmentOrganizationMode ?? DEFAULT_SETTINGS.attachmentOrganizationMode;
+    const parts = [baseFolder];
+    if (mode === "type" || mode === "type-date") {
+      parts.push(attachmentTypeFolder(file.extension));
+    }
+    if (mode === "date" || mode === "type-date") {
+      parts.push(formatAttachmentDate(this.settings.attachmentDateFormat || DEFAULT_SETTINGS.attachmentDateFormat, new Date(file.stat.mtime)));
+    }
+    return normalizePath(parts.filter(Boolean).join("/"));
   }
 
   private async uniqueAttachmentPath(preferredPath: string): Promise<string> {
@@ -452,6 +465,35 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t(language, "settings.attachmentMode.name"))
+      .setDesc(t(language, "settings.attachmentMode.desc"))
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("flat", t(language, "settings.attachmentMode.flat"))
+          .addOption("type", t(language, "settings.attachmentMode.type"))
+          .addOption("date", t(language, "settings.attachmentMode.date"))
+          .addOption("type-date", t(language, "settings.attachmentMode.typeDate"))
+          .setValue(this.plugin.settings.attachmentOrganizationMode)
+          .onChange(async (value) => {
+            this.plugin.settings.attachmentOrganizationMode = value as AttachmentOrganizationMode;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.attachmentDateFormat.name"))
+      .setDesc(t(language, "settings.attachmentDateFormat.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.attachmentDateFormat)
+          .setValue(this.plugin.settings.attachmentDateFormat)
+          .onChange(async (value) => {
+            this.plugin.settings.attachmentDateFormat = normalizeDateFormat(value.trim() || DEFAULT_SETTINGS.attachmentDateFormat);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName(t(language, "settings.exclusions.name"))
       .setDesc(t(language, "settings.exclusions.desc"))
       .addTextArea((text) =>
@@ -568,4 +610,38 @@ function uniqueStrings(values: string[]): string[] {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function attachmentTypeFolder(extension: string): string {
+  const ext = extension.toLowerCase();
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(ext)) {
+    return "images";
+  }
+  if (["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "csv"].includes(ext)) {
+    return "documents";
+  }
+  if (["mp3", "wav", "m4a", "flac", "ogg", "aac"].includes(ext)) {
+    return "audio";
+  }
+  if (["mp4", "mov", "mkv", "webm", "avi"].includes(ext)) {
+    return "video";
+  }
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) {
+    return "archives";
+  }
+  return "files";
+}
+
+function formatAttachmentDate(format: string, date: Date): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return normalizePath(normalizeDateFormat(format)
+    .replace(/YYYY/g, year)
+    .replace(/MM/g, month)
+    .replace(/DD/g, day));
+}
+
+function normalizeDateFormat(format: string): string {
+  return normalizePath(format || DEFAULT_SETTINGS.attachmentDateFormat);
 }

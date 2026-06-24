@@ -48,6 +48,14 @@ type TranslationKey =
   | "settings.manageAttachments.desc"
   | "settings.attachmentFolder.name"
   | "settings.attachmentFolder.desc"
+  | "settings.attachmentMode.name"
+  | "settings.attachmentMode.desc"
+  | "settings.attachmentMode.flat"
+  | "settings.attachmentMode.type"
+  | "settings.attachmentMode.date"
+  | "settings.attachmentMode.typeDate"
+  | "settings.attachmentDateFormat.name"
+  | "settings.attachmentDateFormat.desc"
   | "settings.exclusions.name"
   | "settings.exclusions.desc"
   | "settings.manual.name"
@@ -124,6 +132,14 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.manageAttachments.desc": "Move images and other attachments into one folder and rewrite note links to that path.",
     "settings.attachmentFolder.name": "Attachment folder",
     "settings.attachmentFolder.desc": "Folder used for images, PDFs, audio, video, and other non-note files.",
+    "settings.attachmentMode.name": "Attachment organization",
+    "settings.attachmentMode.desc": "Choose how files are grouped under the attachment folder.",
+    "settings.attachmentMode.flat": "Single folder",
+    "settings.attachmentMode.type": "By type",
+    "settings.attachmentMode.date": "By date",
+    "settings.attachmentMode.typeDate": "By type and date",
+    "settings.attachmentDateFormat.name": "Attachment date format",
+    "settings.attachmentDateFormat.desc": "Used by date-based modes. Supports YYYY, MM, and DD.",
     "settings.exclusions.name": "Exclusions",
     "settings.exclusions.desc": "One path or simple folder pattern per line.",
     "settings.manual.name": "Manual sync",
@@ -199,6 +215,14 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.manageAttachments.desc": "将图片和其他附件移动到统一目录，并把笔记链接改写为该目录路径。",
     "settings.attachmentFolder.name": "附件目录",
     "settings.attachmentFolder.desc": "用于存放图片、PDF、音频、视频和其他非笔记文件的目录。",
+    "settings.attachmentMode.name": "附件整理方式",
+    "settings.attachmentMode.desc": "选择附件目录下的分组方式。",
+    "settings.attachmentMode.flat": "单一目录",
+    "settings.attachmentMode.type": "按类型",
+    "settings.attachmentMode.date": "按日期",
+    "settings.attachmentMode.typeDate": "按类型和日期",
+    "settings.attachmentDateFormat.name": "附件日期格式",
+    "settings.attachmentDateFormat.desc": "用于按日期分组，支持 YYYY、MM、DD。",
     "settings.exclusions.name": "排除规则",
     "settings.exclusions.desc": "每行一个路径或简单文件夹模式。",
     "settings.manual.name": "手动同步",

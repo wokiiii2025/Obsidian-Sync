@@ -1,6 +1,7 @@
 export type SyncMode = "manual" | "periodic";
 export type Language = "en" | "zh";
 export type SyncStatus = "idle" | "running" | "success" | "error" | "locked";
+export type AttachmentOrganizationMode = "flat" | "type" | "date" | "type-date";
 
 export interface SyncStats {
   trackedNotes: number;
@@ -24,6 +25,8 @@ export interface PluginSettings {
   autoSyncDebounceSeconds: number;
   manageAttachments: boolean;
   attachmentFolder: string;
+  attachmentOrganizationMode: AttachmentOrganizationMode;
+  attachmentDateFormat: string;
   conflictMode: "auto" | "manual";
   exclusions: string;
   lastSync: string;

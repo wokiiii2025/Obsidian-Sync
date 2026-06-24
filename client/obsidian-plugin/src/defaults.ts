@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   autoSyncDebounceSeconds: 60,
   manageAttachments: true,
   attachmentFolder: "Attachments",
+  attachmentOrganizationMode: "type-date",
+  attachmentDateFormat: "YYYY/MM/DD",
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
   lastSync: "",
