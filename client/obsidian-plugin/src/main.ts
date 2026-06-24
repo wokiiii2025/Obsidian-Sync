@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { DEFAULT_SETTINGS } from "./defaults";
@@ -11,6 +11,9 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   crypto = new CryptoService();
   api = new SyncApi(() => this.settings.serverUrl, () => this.settings.token);
   intervalId: number | null = null;
+  autoSyncTimeoutId: number | null = null;
+  syncPromise: Promise<void> | null = null;
+  queuedAutoSync = false;
   statusBarEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -41,15 +44,21 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       name: t(this.settings.language, "command.lock"),
       callback: () => {
         this.crypto.lock();
+        this.settings.lastSyncStatus = "locked";
+        this.saveSettings().catch(() => undefined);
         new Notice(t(this.settings.language, "notice.locked"));
       }
     });
+    this.registerFileWatchers();
     this.configureInterval();
   }
 
   onunload(): void {
     if (this.intervalId !== null) {
       window.clearInterval(this.intervalId);
+    }
+    if (this.autoSyncTimeoutId !== null) {
+      window.clearTimeout(this.autoSyncTimeoutId);
     }
   }
 
@@ -70,12 +79,23 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   async syncNow(): Promise<void> {
+    if (this.syncPromise) {
+      return this.syncPromise;
+    }
     const engine = new SyncEngine(this.app.vault, this.settings, this.api, this.crypto, async () => {
       await this.saveSettings();
       this.updateStatusBar();
     });
-    await engine.run();
-    this.updateStatusBar();
+    this.syncPromise = engine.run()
+      .finally(() => {
+        this.syncPromise = null;
+        this.updateStatusBar();
+        if (this.queuedAutoSync) {
+          this.queuedAutoSync = false;
+          this.scheduleAutoSync();
+        }
+      });
+    return this.syncPromise;
   }
 
   private configureInterval(): void {
@@ -90,6 +110,61 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.intervalId = window.setInterval(() => {
       this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
     }, seconds * 1000);
+  }
+
+  private registerFileWatchers(): void {
+    const handler = (file: TAbstractFile) => this.handleVaultChange(file);
+    this.registerEvent(this.app.vault.on("create", handler));
+    this.registerEvent(this.app.vault.on("modify", handler));
+    this.registerEvent(this.app.vault.on("delete", handler));
+    this.registerEvent(this.app.vault.on("rename", handler));
+  }
+
+  private handleVaultChange(file: TAbstractFile): void {
+    if (!this.settings.autoSyncOnChange || !this.shouldAutoSyncFile(file)) {
+      return;
+    }
+    this.scheduleAutoSync();
+  }
+
+  private shouldAutoSyncFile(file: TAbstractFile): boolean {
+    if (!(file instanceof TFile) || file.extension !== "md") {
+      return false;
+    }
+    return !this.isExcludedPath(file.path);
+  }
+
+  private scheduleAutoSync(): void {
+    if (!this.settings.autoSyncOnChange || !this.settings.token) {
+      return;
+    }
+    if (!this.crypto.isUnlocked()) {
+      this.settings.lastSyncStatus = "locked";
+      this.saveSettings().catch(() => undefined);
+      return;
+    }
+    if (this.syncPromise) {
+      this.queuedAutoSync = true;
+      return;
+    }
+    if (this.autoSyncTimeoutId !== null) {
+      window.clearTimeout(this.autoSyncTimeoutId);
+    }
+    const delay = Math.max(1, this.settings.autoSyncDebounceSeconds) * 1000;
+    this.autoSyncTimeoutId = window.setTimeout(() => {
+      this.autoSyncTimeoutId = null;
+      this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
+    }, delay);
+  }
+
+  private isExcludedPath(path: string): boolean {
+    const patterns = this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    return patterns.some((pattern) => {
+      if (pattern.endsWith("/**")) {
+        return path.startsWith(pattern.slice(0, -3));
+      }
+      return path === pattern || path.startsWith(`${pattern}/`);
+    });
   }
 
   private updateStatusBar(): void {
@@ -247,6 +322,31 @@ class SyncSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.settings.syncIntervalSeconds))
           .onChange(async (value) => {
             this.plugin.settings.syncIntervalSeconds = Math.max(10, Number(value) || 30);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.autoSync.name"))
+      .setDesc(t(language, "settings.autoSync.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.autoSyncOnChange)
+          .onChange(async (value) => {
+            this.plugin.settings.autoSyncOnChange = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.autoSyncDebounce.name"))
+      .setDesc(t(language, "settings.autoSyncDebounce.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder("3")
+          .setValue(String(this.plugin.settings.autoSyncDebounceSeconds))
+          .onChange(async (value) => {
+            this.plugin.settings.autoSyncDebounceSeconds = Math.max(1, Number(value) || 3);
             await this.plugin.saveSettings();
           })
       );

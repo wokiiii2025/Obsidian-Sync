@@ -40,6 +40,10 @@ type TranslationKey =
   | "settings.syncMode.periodic"
   | "settings.interval.name"
   | "settings.interval.desc"
+  | "settings.autoSync.name"
+  | "settings.autoSync.desc"
+  | "settings.autoSyncDebounce.name"
+  | "settings.autoSyncDebounce.desc"
   | "settings.exclusions.name"
   | "settings.exclusions.desc"
   | "settings.manual.name"
@@ -63,7 +67,8 @@ type TranslationKey =
   | "settings.stats.none"
   | "statusbar.aria"
   | "statusbar.tooltip"
-  | "statusbar.short";
+  | "statusbar.short"
+  | "notice.autoSyncQueued";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -106,6 +111,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.syncMode.periodic": "Periodic",
     "settings.interval.name": "Sync interval",
     "settings.interval.desc": "Seconds. Used only in periodic mode.",
+    "settings.autoSync.name": "Sync on file changes",
+    "settings.autoSync.desc": "Automatically sync after Markdown files are created, edited, renamed, or deleted.",
+    "settings.autoSyncDebounce.name": "File-change delay",
+    "settings.autoSyncDebounce.desc": "Seconds to wait after the last file change before syncing.",
     "settings.exclusions.name": "Exclusions",
     "settings.exclusions.desc": "One path or simple folder pattern per line.",
     "settings.manual.name": "Manual sync",
@@ -129,7 +138,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.stats.none": "none",
     "statusbar.aria": "Zero Knowledge Sync",
     "statusbar.tooltip": "{status}. Tracked {tracked}. Uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}.",
-    "statusbar.short": "{tracked}"
+    "statusbar.short": "{tracked}",
+    "notice.autoSyncQueued": "Sync queued after file changes."
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -171,6 +181,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.syncMode.periodic": "定时同步",
     "settings.interval.name": "同步间隔",
     "settings.interval.desc": "单位为秒，仅在定时同步模式下生效。",
+    "settings.autoSync.name": "文件变化后自动同步",
+    "settings.autoSync.desc": "Markdown 文件新建、编辑、重命名或删除后自动同步。",
+    "settings.autoSyncDebounce.name": "文件变化延迟",
+    "settings.autoSyncDebounce.desc": "最后一次文件变化后等待多少秒再同步。",
     "settings.exclusions.name": "排除规则",
     "settings.exclusions.desc": "每行一个路径或简单文件夹模式。",
     "settings.manual.name": "手动同步",
@@ -194,7 +208,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.stats.none": "无",
     "statusbar.aria": "Zero Knowledge Sync",
     "statusbar.tooltip": "{status}。已跟踪 {tracked}。上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}。",
-    "statusbar.short": "{tracked}"
+    "statusbar.short": "{tracked}",
+    "notice.autoSyncQueued": "已在文件变化后加入同步队列。"
   }
 };
 

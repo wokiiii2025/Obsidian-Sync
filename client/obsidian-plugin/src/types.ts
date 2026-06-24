@@ -20,6 +20,8 @@ export interface PluginSettings {
   token: string;
   syncMode: SyncMode;
   syncIntervalSeconds: number;
+  autoSyncOnChange: boolean;
+  autoSyncDebounceSeconds: number;
   conflictMode: "auto" | "manual";
   exclusions: string;
   lastSync: string;

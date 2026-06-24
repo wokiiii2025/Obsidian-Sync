@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   token: "",
   syncMode: "manual",
   syncIntervalSeconds: 30,
+  autoSyncOnChange: true,
+  autoSyncDebounceSeconds: 3,
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
   lastSync: "",
