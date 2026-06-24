@@ -58,6 +58,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       id: "zero-knowledge-sync-scan-orphans",
       name: t(this.settings.language, "settings.orphans.name"),
       callback: () => {
+        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.orphans.button") }));
         this.scanOrphanAttachments().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
@@ -65,6 +66,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       id: "zero-knowledge-sync-load-history",
       name: t(this.settings.language, "settings.versions.name"),
       callback: () => {
+        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.versions.button") }));
         this.loadActiveFileVersions().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
@@ -72,6 +74,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       id: "zero-knowledge-sync-refresh-devices",
       name: t(this.settings.language, "settings.devices.name"),
       callback: () => {
+        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.devices.refresh") }));
         this.refreshDevices().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
@@ -573,27 +576,21 @@ class SyncSettingTab extends PluginSettingTab {
       .setName(t(language, "settings.register.name"))
       .setDesc(t(language, "settings.register.desc"))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.register.button")).setCta().onClick(async () => {
-          await this.register();
-        })
+        this.bindActionButton(button.setButtonText(t(language, "settings.register.button")).setCta(), t(language, "settings.register.button"), async () => this.register())
       );
 
     new Setting(containerEl)
       .setName(t(language, "settings.login.name"))
       .setDesc(t(language, "settings.login.desc"))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.login.button")).onClick(async () => {
-          await this.login();
-        })
+        this.bindActionButton(button.setButtonText(t(language, "settings.login.button")), t(language, "settings.login.button"), async () => this.login())
       );
 
     new Setting(containerEl)
       .setName(t(language, "settings.unlock.name"))
       .setDesc(t(language, "settings.unlock.desc"))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.unlock.button")).onClick(async () => {
-          await this.withPassword(() => this.plugin.unlock(this.password));
-        })
+        this.bindActionButton(button.setButtonText(t(language, "settings.unlock.button")), t(language, "settings.unlock.button"), async () => this.withPassword(() => this.plugin.unlock(this.password)))
       );
 
     new Setting(containerEl)
@@ -731,6 +728,7 @@ class SyncSettingTab extends PluginSettingTab {
       }))
       .addButton((button) =>
         button.setButtonText(t(language, "settings.migration.button")).onClick(() => {
+          new Notice(t(language, "notice.actionStarted", { action: t(language, "settings.migration.button") }));
           const count = this.plugin.countUnmanagedAttachments();
           new ConfirmModal(
             this.app,
@@ -754,13 +752,13 @@ class SyncSettingTab extends PluginSettingTab {
         count: orphanCount
       }))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.orphans.button")).onClick(async () => {
+        this.bindActionButton(button.setButtonText(t(language, "settings.orphans.button")), t(language, "settings.orphans.button"), async () => {
           await this.plugin.scanOrphanAttachments();
           this.display();
         })
       )
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.orphans.cleanup")).onClick(async () => {
+        this.bindActionButton(button.setButtonText(t(language, "settings.orphans.cleanup")), t(language, "settings.orphans.cleanup"), async () => {
           await this.plugin.cleanupOrphanAttachments();
           this.display();
         })
@@ -791,7 +789,7 @@ class SyncSettingTab extends PluginSettingTab {
       .setName(t(language, "settings.manual.name"))
       .setDesc(t(language, "settings.manual.desc", { time: this.plugin.settings.lastSync || t(language, "settings.manual.never") }))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.manual.button")).setCta().onClick(async () => {
+        this.bindActionButton(button.setButtonText(t(language, "settings.manual.button")).setCta(), t(language, "settings.manual.button"), async () => {
           await this.plugin.syncNow();
           this.display();
         })
@@ -821,7 +819,7 @@ class SyncSettingTab extends PluginSettingTab {
       .setName(t(language, "settings.versions.name"))
       .setDesc(t(language, "settings.versions.desc"))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.versions.button")).onClick(async () => {
+        this.bindActionButton(button.setButtonText(t(language, "settings.versions.button")), t(language, "settings.versions.button"), async () => {
           await this.plugin.loadActiveFileVersions();
           this.display();
         })
@@ -834,7 +832,7 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(`${version.created_at} - ${version.operation}`)
         .setDesc(`${version.mime_type} ${version.file_size ?? 0} bytes`)
         .addButton((button) =>
-          button.setButtonText(t(language, "settings.versions.restore")).onClick(async () => {
+          this.bindActionButton(button.setButtonText(t(language, "settings.versions.restore")), t(language, "settings.versions.restore"), async () => {
             await this.plugin.restoreVersion(version.id);
             this.display();
           })
@@ -850,7 +848,7 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(`${record.originalPath} (${record.createdAt})`)
         .setDesc(record.conflictPath)
         .addButton((button) =>
-          button.setButtonText(t(language, "settings.conflicts.open")).onClick(async () => {
+          this.bindActionButton(button.setButtonText(t(language, "settings.conflicts.open")), t(language, "settings.conflicts.open"), async () => {
             const file = this.app.vault.getAbstractFileByPath(record.conflictPath);
             if (file instanceof TFile) {
               await this.app.workspace.getLeaf().openFile(file);
@@ -858,7 +856,7 @@ class SyncSettingTab extends PluginSettingTab {
           })
         )
         .addButton((button) =>
-          button.setButtonText(t(language, "settings.conflicts.restore")).onClick(async () => {
+          this.bindActionButton(button.setButtonText(t(language, "settings.conflicts.restore")), t(language, "settings.conflicts.restore"), async () => {
             await this.plugin.restoreConflict(index);
             this.display();
           })
@@ -869,7 +867,7 @@ class SyncSettingTab extends PluginSettingTab {
       .setName(t(language, "settings.devices.name"))
       .setDesc(t(language, "settings.devices.desc"))
       .addButton((button) =>
-        button.setButtonText(t(language, "settings.devices.refresh")).onClick(async () => {
+        this.bindActionButton(button.setButtonText(t(language, "settings.devices.refresh")), t(language, "settings.devices.refresh"), async () => {
           await this.plugin.refreshDevices();
           this.display();
         })
@@ -883,7 +881,7 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(`${device.device_name ?? device.id}${flags ? ` (${flags})` : ""}`)
         .setDesc(`${device.platform ?? ""} ${device.last_seen ?? device.created_at}`)
         .addButton((button) => {
-          button.setButtonText(t(language, "settings.devices.revoke")).setDisabled(device.current || !!device.revoked_at).onClick(async () => {
+          this.bindActionButton(button.setButtonText(t(language, "settings.devices.revoke")).setDisabled(device.current || !!device.revoked_at), t(language, "settings.devices.revoke"), async () => {
             await this.plugin.revokeDevice(device.id);
             this.display();
           });
@@ -969,6 +967,25 @@ class SyncSettingTab extends PluginSettingTab {
   private platform(): string {
     return "obsidian";
   }
+
+  private bindActionButton(button: { setButtonText(text: string): unknown; setDisabled(disabled: boolean): unknown; onClick(callback: () => void): unknown }, label: string, action: () => Promise<void>): unknown {
+    return button.onClick(async () => {
+      const language = this.plugin.settings.language;
+      button.setDisabled(true);
+      button.setButtonText(t(language, "settings.action.working"));
+      new Notice(t(language, "notice.actionStarted", { action: label }));
+      try {
+        await action();
+        new Notice(t(language, "notice.actionComplete", { action: label }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        new Notice(t(language, "notice.prefix", { message }));
+      } finally {
+        button.setButtonText(label);
+        button.setDisabled(false);
+      }
+    });
+  }
 }
 
 class ConfirmModal extends Modal {
@@ -1002,6 +1019,8 @@ class ConfirmModal extends Modal {
       .addButton((button) =>
         button.setButtonText(this.confirmLabel).setCta().onClick(async () => {
           this.settled = true;
+          button.setDisabled(true);
+          button.setButtonText("...");
           await this.onConfirm();
           this.close();
         })
