@@ -32,6 +32,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    container_name: obsidian-telegram-bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-change-this-webhook-secret}
+      TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-}
+      TELEGRAM_REPLY_ON_QUEUE: ${TELEGRAM_REPLY_ON_QUEUE:-true}
+      TELEGRAM_DELETE_AFTER_QUEUE: ${TELEGRAM_DELETE_AFTER_QUEUE:-false}
+      TELEGRAM_VAULT_ID: ${TELEGRAM_VAULT_ID:-}
+      TELEGRAM_TARGET_NOTE_PATH: ${TELEGRAM_TARGET_NOTE_PATH:-Inbox/Telegram.md}
+      SYNC_API_URL: http://sync-api:8000
+      HERMES_API_KEY: ${HERMES_API_KEY}
+    ports:
+      - "127.0.0.1:8091:8000"
+    depends_on:
+      - sync-api
+    restart: unless-stopped
+
   nginx:
     image: nginx:alpine
     container_name: obsidian-sync-nginx
@@ -43,6 +64,7 @@ services:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       - sync-api
+      - telegram-bot
     restart: unless-stopped
 
 volumes:

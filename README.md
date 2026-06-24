@@ -3,6 +3,7 @@
 Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian desktop plugin.
 
 - `server/` - FastAPI + PostgreSQL sync server
+- `server/telegram-bot/` - Telegram webhook intake service
 - `client/obsidian-plugin/` - Obsidian plugin
 - `Docs/obsidian-sync-design.md` - original product and architecture design
 
@@ -25,6 +26,7 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Orphan attachment scanning.
 - First-run confirmation before organizing existing attachments.
 - Confirmed orphan cleanup to the system trash.
+- Telegram Bot intake service for queuing channel/group messages into the Hermes queue.
 
 ## Attachment Management
 

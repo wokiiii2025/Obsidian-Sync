@@ -10,6 +10,7 @@ Phase 1 implements the sync server described in `../Docs/obsidian-sync-design.md
 - JWT authentication for Obsidian clients
 - API-key protected Hermes merge queue endpoint
 - Incremental sync log and version-vector conflict detection
+- Telegram intake service that receives Bot webhooks and queues messages for Hermes
 
 The server stores encrypted note payloads only. Clients are responsible for deriving keys and encrypting paths, content, and DEKs before upload.
 
@@ -39,6 +40,50 @@ Base URL: `/api/v1`
 - `POST /sync/push`
 - `POST /sync/resolve`
 - `POST /hermes/merge`
+
+## Telegram Bot intake
+
+The `telegram-bot/` service receives Telegram Bot webhooks, normalizes text, links, captions, and attachment metadata into Markdown, then queues the item through `POST /api/v1/hermes/merge`.
+
+Required environment:
+
+```bash
+TELEGRAM_BOT_TOKEN=<bot-token-from-botfather>
+TELEGRAM_WEBHOOK_SECRET=<random-secret-path-token>
+TELEGRAM_VAULT_ID=<vault-uuid>
+HERMES_API_KEY=<same-key-used-by-sync-api>
+```
+
+Optional environment:
+
+```bash
+TELEGRAM_ALLOWED_CHAT_IDS=-1001234567890,-1009876543210
+TELEGRAM_TARGET_NOTE_PATH=Inbox/Telegram.md
+TELEGRAM_REPLY_ON_QUEUE=true
+TELEGRAM_DELETE_AFTER_QUEUE=false
+```
+
+Webhook endpoint:
+
+```text
+POST /telegram/webhook/<TELEGRAM_WEBHOOK_SECRET>
+```
+
+Set the Telegram webhook after exposing the bot service over HTTPS:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=https://<domain>/telegram/webhook/$TELEGRAM_WEBHOOK_SECRET" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+```
+
+Current behavior:
+
+- Allowed chat filtering is controlled by `TELEGRAM_ALLOWED_CHAT_IDS`.
+- Messages are queued into the Hermes queue target note, defaulting to `Inbox/Telegram.md`.
+- Bot can reply with the queue id after successful intake.
+- Bot can delete the original Telegram message after successful intake if enabled.
+- Actual AI extraction and merge processing is intentionally left for the Hermes worker stage.
 
 Binary encrypted fields are encoded as base64 in JSON:
 
