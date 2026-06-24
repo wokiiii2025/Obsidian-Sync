@@ -27,6 +27,7 @@ class Device(Base):
     device_name: Mapped[str | None] = mapped_column(Text)
     platform: Mapped[str | None] = mapped_column(Text)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     vault: Mapped[Vault] = relationship(back_populates="devices")
@@ -46,6 +47,24 @@ class Note(Base):
     mime_type: Mapped[str] = mapped_column(Text, default="text/markdown")
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NoteVersion(Base):
+    __tablename__ = "note_versions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    vault_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vaults.id", ondelete="CASCADE"))
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"))
+    device_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    operation: Mapped[str] = mapped_column(Text, nullable=False)
+    path_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    path_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)
+    dek_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)
+    version_vector: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    file_size: Mapped[int | None] = mapped_column(Integer)
+    mime_type: Mapped[str] = mapped_column(Text, default="text/markdown")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SyncLog(Base):

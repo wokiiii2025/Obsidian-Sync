@@ -1,10 +1,11 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
-import { DEFAULT_SETTINGS } from "./defaults";
+import { CONFLICT_DIR, DEFAULT_SETTINGS } from "./defaults";
+import { isFileTypeSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
-import type { AttachmentOrganizationMode, Language, PluginSettings } from "./types";
+import type { AttachmentOrganizationMode, DeviceInfo, Language, NoteVersionInfo, PluginSettings } from "./types";
 
 export default class ZeroKnowledgeSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -17,6 +18,8 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   organizingAttachmentPaths = new Set<string>();
   bulkAttachmentOrganizing = false;
   statusBarEl: HTMLElement | null = null;
+  activeFileVersions: NoteVersionInfo[] = [];
+  devices: DeviceInfo[] = [];
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -56,6 +59,20 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       name: t(this.settings.language, "settings.orphans.name"),
       callback: () => {
         this.scanOrphanAttachments().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }
+    });
+    this.addCommand({
+      id: "zero-knowledge-sync-load-history",
+      name: t(this.settings.language, "settings.versions.name"),
+      callback: () => {
+        this.loadActiveFileVersions().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }
+    });
+    this.addCommand({
+      id: "zero-knowledge-sync-refresh-devices",
+      name: t(this.settings.language, "settings.devices.name"),
+      callback: () => {
+        this.refreshDevices().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
     this.registerFileWatchers();
@@ -180,6 +197,58 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     return this.unmanagedAttachmentFiles().length;
   }
 
+  async loadActiveFileVersions(): Promise<NoteVersionInfo[]> {
+    const file = this.app.workspace.getActiveFile();
+    if (!file) {
+      throw new Error(t(this.settings.language, "error.activeFileRequired"));
+    }
+    const versions = await this.api.history(this.crypto.pathHash(file.path));
+    this.activeFileVersions = versions;
+    new Notice(t(this.settings.language, "notice.versionsLoaded", { count: versions.length }));
+    return versions;
+  }
+
+  async restoreVersion(versionId: number): Promise<void> {
+    await this.api.restoreVersion(versionId);
+    await this.syncNow();
+    new Notice(t(this.settings.language, "notice.versionRestored"));
+  }
+
+  async refreshDevices(): Promise<DeviceInfo[]> {
+    this.devices = await this.api.devices();
+    new Notice(t(this.settings.language, "notice.devicesLoaded", { count: this.devices.length }));
+    return this.devices;
+  }
+
+  async revokeDevice(deviceId: string): Promise<void> {
+    await this.api.revokeDevice(deviceId);
+    await this.refreshDevices();
+    new Notice(t(this.settings.language, "notice.deviceRevoked"));
+  }
+
+  async restoreConflict(recordIndex: number): Promise<void> {
+    const record = this.settings.conflictRecords?.[recordIndex];
+    if (!record) {
+      return;
+    }
+    const conflict = this.app.vault.getAbstractFileByPath(record.conflictPath);
+    if (!(conflict instanceof TFile)) {
+      return;
+    }
+    await this.ensureVaultFolder(parentFolder(record.originalPath));
+    const existing = this.app.vault.getAbstractFileByPath(record.originalPath);
+    const content = await this.app.vault.readBinary(conflict);
+    if (existing instanceof TFile) {
+      await this.app.vault.modifyBinary(existing, content);
+    } else {
+      await this.app.vault.createBinary(record.originalPath, content);
+    }
+    this.settings.conflictRecords.splice(recordIndex, 1);
+    await this.saveSettings();
+    this.scheduleAutoSync();
+    new Notice(t(this.settings.language, "notice.conflictRestored"));
+  }
+
   async syncNow(): Promise<void> {
     if (this.syncPromise) {
       return this.syncPromise;
@@ -239,7 +308,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     if (!(file instanceof TFile)) {
       return false;
     }
-    return !this.isExcludedPath(file.path);
+    return !this.isExcludedPath(file.path) && isFileTypeSyncEnabled(file.extension, this.settings);
   }
 
   private async promptInitialAttachmentOrganization(): Promise<void> {
@@ -579,6 +648,17 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t(language, "settings.selective.name"))
+      .setDesc(t(language, "settings.selective.desc"));
+    this.addSelectiveToggle(containerEl, "settings.selective.markdown", "syncMarkdown");
+    this.addSelectiveToggle(containerEl, "settings.selective.images", "syncImages");
+    this.addSelectiveToggle(containerEl, "settings.selective.documents", "syncDocuments");
+    this.addSelectiveToggle(containerEl, "settings.selective.audio", "syncAudio");
+    this.addSelectiveToggle(containerEl, "settings.selective.video", "syncVideo");
+    this.addSelectiveToggle(containerEl, "settings.selective.archives", "syncArchives");
+    this.addSelectiveToggle(containerEl, "settings.selective.other", "syncOtherFiles");
+
+    new Setting(containerEl)
       .setName(t(language, "settings.manageAttachments.name"))
       .setDesc(t(language, "settings.manageAttachments.desc"))
       .addToggle((toggle) =>
@@ -736,6 +816,80 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(t(language, "settings.stats.error", { message: stats.lastError }))
         .setDesc("");
     }
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.versions.name"))
+      .setDesc(t(language, "settings.versions.desc"))
+      .addButton((button) =>
+        button.setButtonText(t(language, "settings.versions.button")).onClick(async () => {
+          await this.plugin.loadActiveFileVersions();
+          this.display();
+        })
+      );
+    if (this.plugin.activeFileVersions.length === 0) {
+      new Setting(containerEl).setName(t(language, "settings.versions.empty")).setDesc("");
+    }
+    for (const version of this.plugin.activeFileVersions.slice(0, 8)) {
+      new Setting(containerEl)
+        .setName(`${version.created_at} - ${version.operation}`)
+        .setDesc(`${version.mime_type} ${version.file_size ?? 0} bytes`)
+        .addButton((button) =>
+          button.setButtonText(t(language, "settings.versions.restore")).onClick(async () => {
+            await this.plugin.restoreVersion(version.id);
+            this.display();
+          })
+        );
+    }
+
+    const conflictRecords = this.plugin.settings.conflictRecords ?? [];
+    new Setting(containerEl)
+      .setName(t(language, "settings.conflicts.name"))
+      .setDesc(conflictRecords.length > 0 ? t(language, "settings.conflicts.desc") : t(language, "settings.conflicts.empty"));
+    for (const [index, record] of conflictRecords.slice(0, 8).entries()) {
+      new Setting(containerEl)
+        .setName(`${record.originalPath} (${record.createdAt})`)
+        .setDesc(record.conflictPath)
+        .addButton((button) =>
+          button.setButtonText(t(language, "settings.conflicts.open")).onClick(async () => {
+            const file = this.app.vault.getAbstractFileByPath(record.conflictPath);
+            if (file instanceof TFile) {
+              await this.app.workspace.getLeaf().openFile(file);
+            }
+          })
+        )
+        .addButton((button) =>
+          button.setButtonText(t(language, "settings.conflicts.restore")).onClick(async () => {
+            await this.plugin.restoreConflict(index);
+            this.display();
+          })
+        );
+    }
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.devices.name"))
+      .setDesc(t(language, "settings.devices.desc"))
+      .addButton((button) =>
+        button.setButtonText(t(language, "settings.devices.refresh")).onClick(async () => {
+          await this.plugin.refreshDevices();
+          this.display();
+        })
+      );
+    for (const device of this.plugin.devices) {
+      const flags = [
+        device.current ? t(language, "settings.devices.current") : "",
+        device.revoked_at ? t(language, "settings.devices.revoked") : ""
+      ].filter(Boolean).join(", ");
+      new Setting(containerEl)
+        .setName(`${device.device_name ?? device.id}${flags ? ` (${flags})` : ""}`)
+        .setDesc(`${device.platform ?? ""} ${device.last_seen ?? device.created_at}`)
+        .addButton((button) => {
+          button.setButtonText(t(language, "settings.devices.revoke")).setDisabled(device.current || !!device.revoked_at).onClick(async () => {
+            await this.plugin.revokeDevice(device.id);
+            this.display();
+          });
+        });
+    }
+
     const history = this.plugin.settings.syncHistory ?? [];
     new Setting(containerEl)
       .setName(t(language, "settings.history.name"))
@@ -765,6 +919,20 @@ class SyncSettingTab extends PluginSettingTab {
       new Notice(t(this.plugin.settings.language, "notice.registered"));
       this.display();
     });
+  }
+
+  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles">): void {
+    const language = this.plugin.settings.language;
+    new Setting(containerEl)
+      .setName(t(language, labelKey))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(Boolean(this.plugin.settings[settingKey]))
+          .onChange(async (value) => {
+            this.plugin.settings[settingKey] = value;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   private async login(): Promise<void> {
@@ -851,6 +1019,12 @@ class ConfirmModal extends Modal {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
+}
+
+function parentFolder(path: string): string {
+  const normalized = normalizePath(path);
+  const slash = normalized.lastIndexOf("/");
+  return slash > 0 ? normalized.slice(0, slash) : "";
 }
 
 function rewriteAttachmentLinks(markdown: string, oldPath: string, oldBasename: string, newPath: string): string {

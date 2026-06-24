@@ -1,110 +1,6 @@
 import type { Language } from "./types";
 
-type TranslationKey =
-  | "command.syncNow"
-  | "command.lock"
-  | "notice.locked"
-  | "notice.unlocked"
-  | "notice.syncFailed"
-  | "notice.unlockFirst"
-  | "notice.syncComplete"
-  | "notice.syncCompleteStats"
-  | "notice.conflicts"
-  | "notice.registered"
-  | "notice.loggedIn"
-  | "notice.prefix"
-  | "error.vaultIdRequired"
-  | "error.passwordRequired"
-  | "settings.language.name"
-  | "settings.language.desc"
-  | "settings.language.en"
-  | "settings.language.zh"
-  | "settings.serverUrl.name"
-  | "settings.serverUrl.desc"
-  | "settings.vaultId.name"
-  | "settings.vaultId.desc"
-  | "settings.password.name"
-  | "settings.password.desc"
-  | "settings.password.placeholder"
-  | "settings.register.name"
-  | "settings.register.desc"
-  | "settings.register.button"
-  | "settings.login.name"
-  | "settings.login.desc"
-  | "settings.login.button"
-  | "settings.unlock.name"
-  | "settings.unlock.desc"
-  | "settings.unlock.button"
-  | "settings.syncMode.name"
-  | "settings.syncMode.manual"
-  | "settings.syncMode.periodic"
-  | "settings.interval.name"
-  | "settings.interval.desc"
-  | "settings.autoSync.name"
-  | "settings.autoSync.desc"
-  | "settings.autoSyncDebounce.name"
-  | "settings.autoSyncDebounce.desc"
-  | "settings.manageAttachments.name"
-  | "settings.manageAttachments.desc"
-  | "settings.attachmentFolder.name"
-  | "settings.attachmentFolder.desc"
-  | "settings.attachmentMode.name"
-  | "settings.attachmentMode.desc"
-  | "settings.attachmentMode.flat"
-  | "settings.attachmentMode.type"
-  | "settings.attachmentMode.date"
-  | "settings.attachmentMode.typeDate"
-  | "settings.attachmentDateFormat.name"
-  | "settings.attachmentDateFormat.desc"
-  | "settings.attachmentTypeMappings.name"
-  | "settings.attachmentTypeMappings.desc"
-  | "settings.migration.name"
-  | "settings.migration.desc"
-  | "settings.migration.button"
-  | "settings.orphans.name"
-  | "settings.orphans.desc"
-  | "settings.orphans.button"
-  | "settings.orphans.cleanup"
-  | "settings.orphans.none"
-  | "settings.history.name"
-  | "settings.history.desc"
-  | "settings.history.empty"
-  | "settings.exclusions.name"
-  | "settings.exclusions.desc"
-  | "settings.manual.name"
-  | "settings.manual.desc"
-  | "settings.manual.never"
-  | "settings.manual.button"
-  | "settings.status.name"
-  | "settings.status.desc"
-  | "settings.status.idle"
-  | "settings.status.running"
-  | "settings.status.success"
-  | "settings.status.error"
-  | "settings.status.locked"
-  | "settings.stats.tracked"
-  | "settings.stats.uploaded"
-  | "settings.stats.downloaded"
-  | "settings.stats.conflicts"
-  | "settings.stats.started"
-  | "settings.stats.finished"
-  | "settings.stats.error"
-  | "settings.stats.none"
-  | "statusbar.aria"
-  | "statusbar.tooltip"
-  | "statusbar.short"
-  | "notice.autoSyncQueued"
-  | "notice.attachmentMoved"
-  | "notice.attachmentsOrganized"
-  | "notice.orphanScanComplete"
-  | "notice.orphanCleanupComplete"
-  | "modal.organize.title"
-  | "modal.organize.desc"
-  | "modal.organize.confirm"
-  | "modal.cleanup.title"
-  | "modal.cleanup.desc"
-  | "modal.cleanup.confirm"
-  | "modal.cancel";
+type TranslationKey = string;
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -122,6 +18,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.prefix": "Zero Knowledge Sync: {message}",
     "error.vaultIdRequired": "Vault ID is required",
     "error.passwordRequired": "Password is required",
+    "error.activeFileRequired": "Open a file before loading version history.",
     "settings.language.name": "Language",
     "settings.language.desc": "Choose the display language for this plugin.",
     "settings.language.en": "English",
@@ -151,6 +48,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.autoSync.desc": "Automatically sync after notes or attachment files are created, edited, renamed, or deleted.",
     "settings.autoSyncDebounce.name": "File-change delay",
     "settings.autoSyncDebounce.desc": "Seconds to wait after the last file change before syncing.",
+    "settings.selective.name": "Selective sync",
+    "settings.selective.desc": "Choose which file types participate in sync.",
+    "settings.selective.markdown": "Markdown notes",
+    "settings.selective.images": "Images",
+    "settings.selective.documents": "Documents",
+    "settings.selective.audio": "Audio",
+    "settings.selective.video": "Video",
+    "settings.selective.archives": "Archives",
+    "settings.selective.other": "Other files",
     "settings.manageAttachments.name": "Manage attachments",
     "settings.manageAttachments.desc": "Move images and other attachments into one folder and rewrite note links to that path.",
     "settings.attachmentFolder.name": "Attachment folder",
@@ -176,6 +82,22 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.history.name": "Sync history",
     "settings.history.desc": "{time} - {status} - uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}",
     "settings.history.empty": "No sync history yet.",
+    "settings.versions.name": "Current file versions",
+    "settings.versions.desc": "Load encrypted version history for the active file.",
+    "settings.versions.button": "Load versions",
+    "settings.versions.restore": "Restore",
+    "settings.versions.empty": "No versions loaded.",
+    "settings.conflicts.name": "Conflict copies",
+    "settings.conflicts.desc": "Open or restore conflict copies created during sync.",
+    "settings.conflicts.empty": "No tracked conflict copies.",
+    "settings.conflicts.open": "Open",
+    "settings.conflicts.restore": "Use this version",
+    "settings.devices.name": "Devices",
+    "settings.devices.desc": "Refresh and revoke devices registered to this vault.",
+    "settings.devices.refresh": "Refresh",
+    "settings.devices.revoke": "Revoke",
+    "settings.devices.current": "current",
+    "settings.devices.revoked": "revoked",
     "settings.exclusions.name": "Exclusions",
     "settings.exclusions.desc": "One path or simple folder pattern per line.",
     "settings.manual.name": "Manual sync",
@@ -205,6 +127,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.attachmentsOrganized": "Organized {count} existing attachment(s).",
     "notice.orphanScanComplete": "Orphan scan complete. Found {count} attachment(s).",
     "notice.orphanCleanupComplete": "Moved {count} orphan attachment(s) to trash.",
+    "notice.versionsLoaded": "Loaded {count} version(s).",
+    "notice.versionRestored": "Version restored and sync queued.",
+    "notice.devicesLoaded": "Loaded {count} device(s).",
+    "notice.deviceRevoked": "Device revoked.",
+    "notice.conflictRestored": "Conflict copy restored to the original path.",
     "modal.organize.title": "Organize existing attachments?",
     "modal.organize.desc": "Found {count} unmanaged attachment(s). They will be moved into the configured attachment folder and note links will be rewritten.",
     "modal.organize.confirm": "Organize",
@@ -228,6 +155,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.prefix": "Zero Knowledge Sync：{message}",
     "error.vaultIdRequired": "需要填写 Vault ID",
     "error.passwordRequired": "需要填写密码",
+    "error.activeFileRequired": "请先打开一个文件再加载版本历史。",
     "settings.language.name": "语言",
     "settings.language.desc": "选择插件界面显示语言。",
     "settings.language.en": "English",
@@ -257,6 +185,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.autoSync.desc": "笔记或附件文件新建、编辑、重命名或删除后自动同步。",
     "settings.autoSyncDebounce.name": "文件变化延迟",
     "settings.autoSyncDebounce.desc": "最后一次文件变化后等待多少秒再同步。",
+    "settings.selective.name": "选择性同步",
+    "settings.selective.desc": "选择哪些文件类型参与同步。",
+    "settings.selective.markdown": "Markdown 笔记",
+    "settings.selective.images": "图片",
+    "settings.selective.documents": "文档",
+    "settings.selective.audio": "音频",
+    "settings.selective.video": "视频",
+    "settings.selective.archives": "压缩包",
+    "settings.selective.other": "其他文件",
     "settings.manageAttachments.name": "统一管理附件",
     "settings.manageAttachments.desc": "将图片和其他附件移动到统一目录，并把笔记链接改写为该目录路径。",
     "settings.attachmentFolder.name": "附件目录",
@@ -282,6 +219,22 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.history.name": "同步历史",
     "settings.history.desc": "{time} - {status} - 上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}",
     "settings.history.empty": "暂无同步历史。",
+    "settings.versions.name": "当前文件版本",
+    "settings.versions.desc": "加载当前打开文件的加密版本历史。",
+    "settings.versions.button": "加载版本",
+    "settings.versions.restore": "恢复",
+    "settings.versions.empty": "尚未加载版本。",
+    "settings.conflicts.name": "冲突副本",
+    "settings.conflicts.desc": "打开或恢复同步时创建的冲突副本。",
+    "settings.conflicts.empty": "暂无已跟踪冲突副本。",
+    "settings.conflicts.open": "打开",
+    "settings.conflicts.restore": "使用此版本",
+    "settings.devices.name": "设备",
+    "settings.devices.desc": "刷新并撤销当前 Vault 下已注册设备。",
+    "settings.devices.refresh": "刷新",
+    "settings.devices.revoke": "撤销",
+    "settings.devices.current": "当前",
+    "settings.devices.revoked": "已撤销",
     "settings.exclusions.name": "排除规则",
     "settings.exclusions.desc": "每行一个路径或简单文件夹模式。",
     "settings.manual.name": "手动同步",
@@ -311,6 +264,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.attachmentsOrganized": "已整理 {count} 个已有附件。",
     "notice.orphanScanComplete": "孤立附件扫描完成，发现 {count} 个。",
     "notice.orphanCleanupComplete": "已将 {count} 个孤立附件移入回收站。",
+    "notice.versionsLoaded": "已加载 {count} 个版本。",
+    "notice.versionRestored": "版本已恢复，并已加入同步。",
+    "notice.devicesLoaded": "已加载 {count} 台设备。",
+    "notice.deviceRevoked": "设备已撤销。",
+    "notice.conflictRestored": "冲突副本已恢复到原始路径。",
     "modal.organize.title": "是否整理已有附件？",
     "modal.organize.desc": "发现 {count} 个未统一管理的附件。确认后会移动到配置的附件目录，并改写笔记引用。",
     "modal.organize.confirm": "整理",

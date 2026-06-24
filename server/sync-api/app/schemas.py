@@ -126,3 +126,55 @@ class HermesMergeResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class NoteVersionInfo(BaseModel):
+    id: int
+    note_id: uuid.UUID
+    operation: str
+    version_vector: dict[str, int]
+    file_size: int | None
+    mime_type: str
+    created_at: datetime
+
+
+class NoteVersionsResponse(BaseModel):
+    versions: list[NoteVersionInfo]
+
+
+class NoteVersionPayload(BaseModel):
+    id: int
+    note_id: uuid.UUID
+    operation: str
+    path_hash: str
+    encrypted_path: Base64Bytes
+    encrypted_content: Base64Bytes | None
+    encrypted_dek: Base64Bytes | None
+    version_vector: dict[str, int]
+    file_size: int | None
+    mime_type: str
+    created_at: datetime
+
+
+class RestoreVersionResponse(BaseModel):
+    status: str
+    note_id: uuid.UUID
+    version_vector: dict[str, int]
+
+
+class DeviceInfo(BaseModel):
+    id: uuid.UUID
+    device_name: str | None
+    platform: str | None
+    last_seen: datetime | None
+    created_at: datetime
+    revoked_at: datetime | None
+    current: bool = False
+
+
+class DevicesResponse(BaseModel):
+    devices: list[DeviceInfo]
+
+
+class RevokeDeviceResponse(BaseModel):
+    status: str

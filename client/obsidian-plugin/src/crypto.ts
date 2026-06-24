@@ -35,6 +35,10 @@ export class CryptoService {
     this.kek = null;
   }
 
+  pathHash(path: string): string {
+    return bytesToBase64(sha256(textToBytes(path)));
+  }
+
   async encryptNote(path: string, content: string): Promise<EncryptedNote> {
     return this.encryptFile(path, textToBytes(content));
   }
@@ -42,8 +46,7 @@ export class CryptoService {
   async encryptFile(path: string, content: Uint8Array): Promise<EncryptedNote> {
     const kek = this.requireKek();
     const dek = randomBytes(KEY_LENGTH);
-    const pathHashBytes = sha256(textToBytes(path));
-    const pathHash = bytesToBase64(pathHashBytes);
+    const pathHash = this.pathHash(path);
     const aad = textToBytes(pathHash);
 
     return {

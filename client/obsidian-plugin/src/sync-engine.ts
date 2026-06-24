@@ -3,6 +3,7 @@ import { CONFLICT_DIR } from "./defaults";
 import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
+import { isFileTypeSyncEnabled } from "./file-policy";
 import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
@@ -89,6 +90,9 @@ export class SyncEngine {
       return;
     }
     const decrypted = await this.crypto.decryptRemoteFile(change.path_hash, change.encrypted_path, change.encrypted_content, change.encrypted_dek);
+    if (!isFileTypeSyncEnabled(extensionForPath(decrypted.path), this.settings)) {
+      return;
+    }
     const existing = this.vault.getAbstractFileByPath(decrypted.path);
     if (existing && "extension" in existing) {
       await this.vault.modifyBinary(existing as TFile, decrypted.content.buffer as ArrayBuffer);
@@ -113,6 +117,9 @@ export class SyncEngine {
     if (!path) {
       return;
     }
+    if (!isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
+      return;
+    }
     const existing = this.vault.getAbstractFileByPath(path);
     if (existing && "extension" in existing) {
       await this.vault.delete(existing);
@@ -122,7 +129,7 @@ export class SyncEngine {
 
   private async pushLocalChanges(state: SyncState): Promise<void> {
     const changes: PushChange[] = [];
-    const files = this.vault.getFiles().filter((file) => !this.isExcluded(file.path));
+    const files = this.vault.getFiles().filter((file) => !this.isExcluded(file.path) && isFileTypeSyncEnabled(file.extension, this.settings));
 
     for (const file of files) {
       const tracked = state.notes[file.path];
@@ -152,6 +159,9 @@ export class SyncEngine {
 
     for (const path of Object.keys(state.notes)) {
       if (this.isExcluded(path)) {
+        continue;
+      }
+      if (!isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
         continue;
       }
       if (this.vault.getAbstractFileByPath(path)) {
@@ -184,6 +194,14 @@ export class SyncEngine {
       const conflictPath = `${CONFLICT_DIR}/${remote.path.replace(/[\\/]/g, "-")}-${Date.now()}`;
       await this.ensureParentFolder(conflictPath);
       await this.vault.createBinary(conflictPath, remote.content.buffer as ArrayBuffer);
+      this.settings.conflictRecords = [
+        {
+          originalPath: remote.path,
+          conflictPath,
+          createdAt: new Date().toISOString()
+        },
+        ...(this.settings.conflictRecords ?? [])
+      ].slice(0, 50);
     }
     if (response.conflicts.length > 0) {
       new Notice(t(this.settings.language, "notice.conflicts", { count: response.conflicts.length }));
@@ -219,6 +237,12 @@ export class SyncEngine {
     };
     this.settings.syncHistory = [entry, ...(this.settings.syncHistory ?? [])].slice(0, MAX_SYNC_HISTORY);
   }
+}
+
+function extensionForPath(path: string): string {
+  const filename = path.split("/").pop() ?? path;
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 ? filename.slice(dot + 1) : "";
 }
 
 function mimeTypeForPath(path: string): string {

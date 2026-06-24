@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.database import get_session
+from app.models import Device
 
 password_context = CryptContext(schemes=["argon2"], deprecated="auto")
 bearer = HTTPBearer(auto_error=False)
@@ -46,6 +47,10 @@ async def current_auth(
         device_id = uuid.UUID(payload["device_id"])
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token") from exc
+    device = await session.get(Device, device_id)
+    if device is None or device.vault_id != vault_id or device.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Device is not active")
+    device.last_seen = datetime.now(UTC)
     return vault_id, device_id, session
 
 

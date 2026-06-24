@@ -15,6 +15,10 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Status bar sync icon in Obsidian with clickable manual sync.
 - Sync status and statistics in the plugin settings page.
 - Recent sync history in the plugin settings page.
+- Encrypted version history with restore for the active file.
+- Tracked conflict copies with open/restore actions.
+- Device list and revoke-device support.
+- File-type selective sync.
 - English and Chinese UI.
 - Configurable attachment management with automatic link rewriting.
 - Custom attachment type folder mappings.
@@ -66,11 +70,9 @@ High-value improvements to consider next:
 
 | Area | Feature | Value |
 |---|---|---|
-| Conflict handling | Visual conflict review and merge UI | Safer than relying only on conflict copies |
 | Selective sync | Include/exclude folders from the settings UI | Useful for large vaults, private folders, and generated files |
 | Bandwidth | Chunked upload/download for large attachments | More reliable for videos and large PDFs |
 | Security | OS keychain integration for the unlock key | Avoids keeping the password workflow too manual |
-| Multi-device | Device list and revoke-device support | Lets users remove lost or retired devices |
 | Recovery | Export/import encrypted backup package | Adds a clear disaster recovery path |
 | Mobile | Mobile-focused compatibility pass | Ensures attachment sync and settings work well on phone/tablet |
 

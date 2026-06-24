@@ -10,6 +10,13 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
   autoSyncDebounceSeconds: 60,
+  syncMarkdown: true,
+  syncImages: true,
+  syncDocuments: true,
+  syncAudio: true,
+  syncVideo: true,
+  syncArchives: true,
+  syncOtherFiles: true,
   manageAttachments: true,
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",
@@ -39,7 +46,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     lastFinishedAt: "",
     lastError: ""
   },
-  syncHistory: []
+  syncHistory: [],
+  conflictRecords: []
 };
 
 export const DEFAULT_STATE: SyncState = {

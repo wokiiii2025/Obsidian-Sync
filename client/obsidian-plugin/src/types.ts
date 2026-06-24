@@ -17,6 +17,12 @@ export interface SyncHistoryEntry extends SyncStats {
   status: SyncStatus;
 }
 
+export interface ConflictRecord {
+  originalPath: string;
+  conflictPath: string;
+  createdAt: string;
+}
+
 export interface PluginSettings {
   language: Language;
   serverUrl: string;
@@ -27,6 +33,13 @@ export interface PluginSettings {
   syncIntervalSeconds: number;
   autoSyncOnChange: boolean;
   autoSyncDebounceSeconds: number;
+  syncMarkdown: boolean;
+  syncImages: boolean;
+  syncDocuments: boolean;
+  syncAudio: boolean;
+  syncVideo: boolean;
+  syncArchives: boolean;
+  syncOtherFiles: boolean;
   manageAttachments: boolean;
   attachmentFolder: string;
   attachmentOrganizationMode: AttachmentOrganizationMode;
@@ -43,6 +56,7 @@ export interface PluginSettings {
   lastSyncStatus: SyncStatus;
   lastSyncStats: SyncStats;
   syncHistory: SyncHistoryEntry[];
+  conflictRecords: ConflictRecord[];
 }
 
 export interface SyncStateEntry {
@@ -96,4 +110,31 @@ export interface PushResponse {
     version_vector: Record<string, number>;
   }>;
   conflicts: ConflictChange[];
+}
+
+export interface NoteVersionInfo {
+  id: number;
+  note_id: string;
+  operation: string;
+  version_vector: Record<string, number>;
+  file_size: number | null;
+  mime_type: string;
+  created_at: string;
+}
+
+export interface NoteVersionPayload extends NoteVersionInfo {
+  path_hash: string;
+  encrypted_path: string;
+  encrypted_content: string | null;
+  encrypted_dek: string | null;
+}
+
+export interface DeviceInfo {
+  id: string;
+  device_name: string | null;
+  platform: string | null;
+  last_seen: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  current: boolean;
 }

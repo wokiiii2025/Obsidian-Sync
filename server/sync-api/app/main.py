@@ -1,24 +1,32 @@
+import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
-from app.models import Device, HermesQueue, Note, SyncLog, Vault
+from app.database import engine, get_session
+from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 from app.schemas import (
     AcceptedChange,
     ChangesResponse,
     ConflictChange,
+    DeviceInfo,
+    DevicesResponse,
     HealthResponse,
     HermesMergeRequest,
     HermesMergeResponse,
     LoginRequest,
     LoginResponse,
+    NoteVersionInfo,
+    NoteVersionPayload,
+    NoteVersionsResponse,
     PushRequest,
     PushResponse,
+    RestoreVersionResponse,
+    RevokeDeviceResponse,
     RegisterRequest,
     RegisterResponse,
     RemoteChange,
@@ -35,6 +43,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def migrate_schema() -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS note_versions (
+                    id BIGSERIAL PRIMARY KEY,
+                    vault_id UUID NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+                    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                    device_id UUID,
+                    operation TEXT NOT NULL,
+                    path_hash TEXT NOT NULL,
+                    path_encrypted BYTEA NOT NULL,
+                    content_encrypted BYTEA,
+                    dek_encrypted BYTEA,
+                    version_vector JSONB NOT NULL DEFAULT '{}',
+                    file_size INT,
+                    mime_type TEXT DEFAULT 'text/markdown',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_versions_note_time ON note_versions(note_id, created_at DESC)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_versions_vault_time ON note_versions(vault_id, created_at DESC)"))
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -159,6 +196,21 @@ async def push(payload: PushRequest, auth: Annotated[tuple, Depends(current_auth
 
         await session.flush()
         session.add(
+            NoteVersion(
+                vault_id=vault_id,
+                note_id=note.id,
+                device_id=device_id,
+                operation=operation,
+                path_hash=note.path_hash,
+                path_encrypted=note.path_encrypted,
+                content_encrypted=None if operation == "delete" else note.content_encrypted,
+                dek_encrypted=None if operation == "delete" else note.dek_encrypted,
+                version_vector=note.version_vector,
+                file_size=note.file_size,
+                mime_type=note.mime_type,
+            )
+        )
+        session.add(
             SyncLog(
                 vault_id=vault_id,
                 note_id=note.id,
@@ -179,6 +231,149 @@ async def push(payload: PushRequest, auth: Annotated[tuple, Depends(current_auth
 
     await session.commit()
     return PushResponse(accepted=accepted, conflicts=conflicts)
+
+
+@app.get("/api/v1/sync/history", response_model=NoteVersionsResponse)
+async def history(
+    auth: Annotated[tuple, Depends(current_auth)],
+    path_hash: str = Query(min_length=1),
+    limit: int = Query(default=30, ge=1, le=100),
+) -> NoteVersionsResponse:
+    vault_id, _device_id, session = auth
+    note = await _get_note_by_path_hash(session, vault_id, path_hash)
+    if note is None:
+        return NoteVersionsResponse(versions=[])
+    query = (
+        select(NoteVersion)
+        .where(NoteVersion.vault_id == vault_id, NoteVersion.note_id == note.id)
+        .order_by(NoteVersion.created_at.desc(), NoteVersion.id.desc())
+        .limit(limit)
+    )
+    versions = (await session.execute(query)).scalars().all()
+    return NoteVersionsResponse(
+        versions=[
+            NoteVersionInfo(
+                id=version.id,
+                note_id=version.note_id,
+                operation=version.operation,
+                version_vector=version.version_vector,
+                file_size=version.file_size,
+                mime_type=version.mime_type,
+                created_at=version.created_at,
+            )
+            for version in versions
+        ]
+    )
+
+
+@app.get("/api/v1/sync/history/{version_id}", response_model=NoteVersionPayload)
+async def history_payload(version_id: int, auth: Annotated[tuple, Depends(current_auth)]) -> NoteVersionPayload:
+    vault_id, _device_id, session = auth
+    version = await session.get(NoteVersion, version_id)
+    if version is None or version.vault_id != vault_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return NoteVersionPayload(
+        id=version.id,
+        note_id=version.note_id,
+        operation=version.operation,
+        path_hash=version.path_hash,
+        encrypted_path=version.path_encrypted,
+        encrypted_content=version.content_encrypted,
+        encrypted_dek=version.dek_encrypted,
+        version_vector=version.version_vector,
+        file_size=version.file_size,
+        mime_type=version.mime_type,
+        created_at=version.created_at,
+    )
+
+
+@app.post("/api/v1/sync/history/{version_id}/restore", response_model=RestoreVersionResponse)
+async def restore_version(version_id: int, auth: Annotated[tuple, Depends(current_auth)]) -> RestoreVersionResponse:
+    vault_id, device_id, session = auth
+    version = await session.get(NoteVersion, version_id)
+    if version is None or version.vault_id != vault_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+    if version.operation == "delete" or version.content_encrypted is None or version.dek_encrypted is None:
+        raise HTTPException(status_code=422, detail="Deleted versions cannot be restored directly")
+    note = await session.get(Note, version.note_id)
+    if note is None or note.vault_id != vault_id:
+        raise HTTPException(status_code=404, detail="Note not found")
+    vector = dict(version.version_vector)
+    vector[str(device_id)] = int(vector.get(str(device_id), 0)) + 1
+    note.path_hash = version.path_hash
+    note.path_encrypted = version.path_encrypted
+    note.content_encrypted = version.content_encrypted
+    note.dek_encrypted = version.dek_encrypted
+    note.version_vector = vector
+    note.file_size = version.file_size
+    note.mime_type = version.mime_type
+    note.deleted_at = None
+    await session.flush()
+    session.add(
+        NoteVersion(
+            vault_id=vault_id,
+            note_id=note.id,
+            device_id=device_id,
+            operation="restore",
+            path_hash=note.path_hash,
+            path_encrypted=note.path_encrypted,
+            content_encrypted=note.content_encrypted,
+            dek_encrypted=note.dek_encrypted,
+            version_vector=note.version_vector,
+            file_size=note.file_size,
+            mime_type=note.mime_type,
+        )
+    )
+    session.add(
+        SyncLog(
+            vault_id=vault_id,
+            note_id=note.id,
+            device_id=device_id,
+            operation="update",
+            path_hash=note.path_hash,
+            version_vector=note.version_vector,
+        )
+    )
+    await session.commit()
+    return RestoreVersionResponse(status="restored", note_id=note.id, version_vector=note.version_vector)
+
+
+@app.get("/api/v1/devices", response_model=DevicesResponse)
+async def list_devices(auth: Annotated[tuple, Depends(current_auth)]) -> DevicesResponse:
+    vault_id, device_id, session = auth
+    query = select(Device).where(Device.vault_id == vault_id).order_by(Device.created_at.desc())
+    devices = (await session.execute(query)).scalars().all()
+    return DevicesResponse(
+        devices=[
+            DeviceInfo(
+                id=device.id,
+                device_name=device.device_name,
+                platform=device.platform,
+                last_seen=device.last_seen,
+                created_at=device.created_at,
+                revoked_at=device.revoked_at,
+                current=device.id == device_id,
+            )
+            for device in devices
+        ]
+    )
+
+
+@app.delete("/api/v1/devices/{target_device_id}", response_model=RevokeDeviceResponse)
+async def revoke_device(target_device_id: str, auth: Annotated[tuple, Depends(current_auth)]) -> RevokeDeviceResponse:
+    vault_id, device_id, session = auth
+    try:
+        target_uuid = uuid.UUID(target_device_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid device id") from exc
+    if target_uuid == device_id:
+        raise HTTPException(status_code=422, detail="Cannot revoke the current device")
+    device = await session.get(Device, target_uuid)
+    if device is None or device.vault_id != vault_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    device.revoked_at = datetime.now(UTC)
+    await session.commit()
+    return RevokeDeviceResponse(status="revoked")
 
 
 @app.post("/api/v1/sync/resolve", response_model=ResolveResponse)

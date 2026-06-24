@@ -10,6 +10,10 @@ This is the client-side plugin for the sync server in `../../server`.
 - Manual sync from the Obsidian status bar icon.
 - Periodic sync and delayed auto sync after local file changes.
 - Recent sync history in settings.
+- Encrypted version history and restore for the active file.
+- Tracked conflict copies with open/restore actions.
+- Device list and revoke-device support.
+- File-type selective sync.
 - English and Chinese settings UI.
 - Optional managed attachment folder with automatic note link rewriting.
 - Custom attachment type folder mappings.
@@ -123,6 +127,13 @@ If an extension appears in multiple mappings, the first matching mapping wins.
 The settings page includes an orphan attachment scan. It checks files under the configured attachment folder and reports attachments that are not referenced by Markdown or wiki links in any note.
 
 Cleanup requires a second confirmation and moves orphan attachments to the system trash instead of permanently deleting them.
+
+## Version History, Conflicts, Devices, and Selective Sync
+
+- Current file versions: open a file, click **Load versions**, then restore a selected encrypted version.
+- Conflict copies: open or restore tracked conflict copies created by sync conflicts.
+- Devices: refresh registered devices and revoke non-current devices.
+- Selective sync: enable or disable Markdown, images, documents, audio, video, archives, and other files.
 
 ## Notes
 
