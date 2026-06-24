@@ -50,6 +50,13 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
         new Notice(t(this.settings.language, "notice.locked"));
       }
     });
+    this.addCommand({
+      id: "zero-knowledge-sync-scan-orphans",
+      name: t(this.settings.language, "settings.orphans.name"),
+      callback: () => {
+        this.scanOrphanAttachments().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }
+    });
     this.registerFileWatchers();
     this.configureInterval();
   }
@@ -77,6 +84,34 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     await this.crypto.unlock(password);
     new Notice(t(this.settings.language, "notice.unlocked"));
     this.updateStatusBar();
+  }
+
+  async scanOrphanAttachments(): Promise<string[]> {
+    const folder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
+    const markdownFiles = this.app.vault.getMarkdownFiles().filter((file) => !this.isExcludedPath(file.path));
+    const referencedTargets = new Set<string>();
+    for (const file of markdownFiles) {
+      const content = await this.app.vault.read(file);
+      for (const target of extractAttachmentTargets(content)) {
+        referencedTargets.add(target);
+        referencedTargets.add(target.split("/").pop() ?? target);
+      }
+    }
+    const orphanAttachments = this.app.vault.getFiles()
+      .filter((file) => file.extension !== "md")
+      .filter((file) => !this.isExcludedPath(file.path))
+      .filter((file) => file.path.startsWith(`${folder}/`))
+      .filter((file) => {
+        const basename = file.path.split("/").pop() ?? file.path;
+        return !referencedTargets.has(file.path) && !referencedTargets.has(basename);
+      })
+      .map((file) => file.path)
+      .sort();
+    this.settings.orphanAttachments = orphanAttachments;
+    this.settings.lastOrphanScanAt = new Date().toISOString();
+    await this.saveSettings();
+    new Notice(t(this.settings.language, "notice.orphanScanComplete", { count: orphanAttachments.length }));
+    return orphanAttachments;
   }
 
   async syncNow(): Promise<void> {
@@ -182,7 +217,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     const mode = this.settings.attachmentOrganizationMode ?? DEFAULT_SETTINGS.attachmentOrganizationMode;
     const parts = [baseFolder];
     if (mode === "type" || mode === "type-date") {
-      parts.push(attachmentTypeFolder(file.extension));
+      parts.push(attachmentTypeFolder(file.extension, this.settings.attachmentTypeMappings));
     }
     if (mode === "date" || mode === "type-date") {
       parts.push(formatAttachmentDate(this.settings.attachmentDateFormat || DEFAULT_SETTINGS.attachmentDateFormat, new Date(file.stat.mtime)));
@@ -494,6 +529,41 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t(language, "settings.attachmentTypeMappings.name"))
+      .setDesc(t(language, "settings.attachmentTypeMappings.desc"))
+      .addTextArea((text) =>
+        text
+          .setValue(this.plugin.settings.attachmentTypeMappings)
+          .onChange(async (value) => {
+            this.plugin.settings.attachmentTypeMappings = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    const orphanCount = this.plugin.settings.orphanAttachments?.length ?? 0;
+    new Setting(containerEl)
+      .setName(t(language, "settings.orphans.name"))
+      .setDesc(t(language, "settings.orphans.desc", {
+        time: this.plugin.settings.lastOrphanScanAt || t(language, "settings.stats.none"),
+        count: orphanCount
+      }))
+      .addButton((button) =>
+        button.setButtonText(t(language, "settings.orphans.button")).onClick(async () => {
+          await this.plugin.scanOrphanAttachments();
+          this.display();
+        })
+      );
+    if (orphanCount > 0) {
+      new Setting(containerEl)
+        .setName(this.plugin.settings.orphanAttachments.slice(0, 5).join(", "))
+        .setDesc(orphanCount > 5 ? `+${orphanCount - 5}` : "");
+    } else if (this.plugin.settings.lastOrphanScanAt) {
+      new Setting(containerEl)
+        .setName(t(language, "settings.orphans.none"))
+        .setDesc("");
+    }
+
+    new Setting(containerEl)
       .setName(t(language, "settings.exclusions.name"))
       .setDesc(t(language, "settings.exclusions.desc"))
       .addTextArea((text) =>
@@ -533,6 +603,22 @@ class SyncSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName(t(language, "settings.stats.error", { message: stats.lastError }))
         .setDesc("");
+    }
+    const history = this.plugin.settings.syncHistory ?? [];
+    new Setting(containerEl)
+      .setName(t(language, "settings.history.name"))
+      .setDesc(history.length > 0 ? "" : t(language, "settings.history.empty"));
+    for (const entry of history.slice(0, 5)) {
+      const entryStatus = t(language, `settings.status.${entry.status}`);
+      new Setting(containerEl)
+        .setName(entry.lastFinishedAt || entry.lastStartedAt || t(language, "settings.stats.none"))
+        .setDesc(t(language, "settings.history.desc", {
+          time: entry.lastFinishedAt || entry.lastStartedAt || t(language, "settings.stats.none"),
+          status: entryStatus,
+          uploaded: entry.uploaded,
+          downloaded: entry.downloaded,
+          conflicts: entry.conflicts
+        }));
     }
   }
 
@@ -612,24 +698,57 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function attachmentTypeFolder(extension: string): string {
+function attachmentTypeFolder(extension: string, mappingsText: string): string {
   const ext = extension.toLowerCase();
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(ext)) {
-    return "images";
-  }
-  if (["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "csv"].includes(ext)) {
-    return "documents";
-  }
-  if (["mp3", "wav", "m4a", "flac", "ogg", "aac"].includes(ext)) {
-    return "audio";
-  }
-  if (["mp4", "mov", "mkv", "webm", "avi"].includes(ext)) {
-    return "video";
-  }
-  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) {
-    return "archives";
+  const mappings = parseAttachmentTypeMappings(mappingsText || DEFAULT_SETTINGS.attachmentTypeMappings);
+  for (const [folder, extensions] of mappings) {
+    if (extensions.has(ext)) {
+      return folder;
+    }
   }
   return "files";
+}
+
+function parseAttachmentTypeMappings(text: string): Array<[string, Set<string>]> {
+  return text.split(/\r?\n/)
+    .map((line): [string, Set<string>] | null => {
+      const [folderPart, extensionsPart] = line.split(":");
+      const folder = normalizePath((folderPart ?? "").trim());
+      if (!folder || !extensionsPart) {
+        return null;
+      }
+      const extensions = new Set(extensionsPart
+        .split(/[, ]+/)
+        .map((extension) => extension.trim().replace(/^\./, "").toLowerCase())
+        .filter(Boolean));
+      return extensions.size > 0 ? [folder, extensions] : null;
+    })
+    .filter((entry): entry is [string, Set<string>] => entry !== null);
+}
+
+function extractAttachmentTargets(markdown: string): string[] {
+  const targets: string[] = [];
+  const wikiPattern = /!?\[\[([^|\]#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g;
+  const markdownPattern = /!?\[[^\]]*]\(([^)#]+)(?:#[^)]*)?\)/g;
+  for (const match of markdown.matchAll(wikiPattern)) {
+    targets.push(normalizePath(decodeTarget(match[1].trim())));
+  }
+  for (const match of markdown.matchAll(markdownPattern)) {
+    const target = match[1].trim();
+    if (/^[a-z]+:\/\//i.test(target) || target.startsWith("mailto:")) {
+      continue;
+    }
+    targets.push(normalizePath(decodeTarget(target)));
+  }
+  return uniqueStrings(targets);
+}
+
+function decodeTarget(target: string): string {
+  try {
+    return decodeURI(target);
+  } catch {
+    return target;
+  }
 }
 
 function formatAttachmentDate(format: string, date: Date): string {

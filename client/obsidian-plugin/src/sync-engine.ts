@@ -4,7 +4,9 @@ import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
 import { loadSyncState, saveSyncState } from "./state";
-import type { PluginSettings, PushChange, RemoteChange, SyncState } from "./types";
+import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
+
+const MAX_SYNC_HISTORY = 20;
 
 export class SyncEngine {
   private running = false;
@@ -26,6 +28,7 @@ export class SyncEngine {
     if (!this.crypto.isUnlocked()) {
       this.settings.lastSyncStatus = "locked";
       this.settings.lastSyncStats.lastFinishedAt = new Date().toISOString();
+      this.recordSyncHistory("locked");
       await this.saveSettings();
       new Notice(t(this.settings.language, "notice.unlockFirst"));
       return;
@@ -45,6 +48,7 @@ export class SyncEngine {
       this.settings.lastSyncStatus = "success";
       this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length;
       this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
+      this.recordSyncHistory("success");
       await saveSyncState(this.vault, state);
       await this.saveSettings();
       new Notice(t(this.settings.language, "notice.syncCompleteStats", {
@@ -57,6 +61,7 @@ export class SyncEngine {
       this.settings.lastSyncStatus = "error";
       this.settings.lastSyncStats.lastError = message;
       this.settings.lastSyncStats.lastFinishedAt = new Date().toISOString();
+      this.recordSyncHistory("error");
       await this.saveSettings();
       throw error;
     } finally {
@@ -205,6 +210,14 @@ export class SyncEngine {
         await this.vault.createFolder(current);
       }
     }
+  }
+
+  private recordSyncHistory(status: SyncStatus): void {
+    const entry = {
+      ...this.settings.lastSyncStats,
+      status
+    };
+    this.settings.syncHistory = [entry, ...(this.settings.syncHistory ?? [])].slice(0, MAX_SYNC_HISTORY);
   }
 }
 

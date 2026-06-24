@@ -14,6 +14,15 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",
   attachmentDateFormat: "YYYY/MM/DD",
+  attachmentTypeMappings: [
+    "images: png, jpg, jpeg, gif, webp, svg, bmp, avif",
+    "documents: pdf, doc, docx, ppt, pptx, xls, xlsx, csv",
+    "audio: mp3, wav, m4a, flac, ogg, aac",
+    "video: mp4, mov, mkv, webm, avi",
+    "archives: zip, rar, 7z, tar, gz"
+  ].join("\n"),
+  lastOrphanScanAt: "",
+  orphanAttachments: [],
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
   lastSync: "",
@@ -26,7 +35,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     lastStartedAt: "",
     lastFinishedAt: "",
     lastError: ""
-  }
+  },
+  syncHistory: []
 };
 
 export const DEFAULT_STATE: SyncState = {

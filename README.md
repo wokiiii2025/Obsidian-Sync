@@ -14,8 +14,11 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Manual sync, periodic sync, and automatic sync after local file changes.
 - Status bar sync icon in Obsidian with clickable manual sync.
 - Sync status and statistics in the plugin settings page.
+- Recent sync history in the plugin settings page.
 - English and Chinese UI.
 - Configurable attachment management with automatic link rewriting.
+- Custom attachment type folder mappings.
+- Orphan attachment scanning.
 
 ## Attachment Management
 
@@ -28,6 +31,7 @@ Settings:
 | Attachment folder | Base folder for managed attachments | `Attachments` |
 | Attachment organization | How attachments are grouped under the base folder | Single folder / By type / By date / By type and date |
 | Attachment date format | Date path format used by date-based modes | `YYYY/MM/DD` or `YYYY-MM-DD` |
+| Attachment type folders | Extension-to-folder mapping | `images: png, jpg, webp` |
 
 Organization examples:
 
@@ -52,15 +56,14 @@ Built-in type folders:
 
 When a note references `![[photo.png]]` or `![photo](photo.png)`, and the file is moved to a managed attachment path, the plugin rewrites the reference to the final path.
 
+The settings page also includes an orphan attachment scan. It checks the configured attachment folder and reports attachments that are not referenced by any Markdown note.
+
 ## Useful Future Extensions
 
 High-value improvements to consider next:
 
 | Area | Feature | Value |
 |---|---|---|
-| Sync visibility | Sync history panel with recent uploads, downloads, skips, and conflicts | Easier troubleshooting without reading logs |
-| Attachment control | Custom extension-to-folder mapping | Users can define folders like `assets/screenshots` or `assets/pdfs` |
-| Attachment cleanup | Detect orphaned attachments not referenced by any note | Keeps vault storage clean |
 | Conflict handling | Visual conflict review and merge UI | Safer than relying only on conflict copies |
 | Selective sync | Include/exclude folders from the settings UI | Useful for large vaults, private folders, and generated files |
 | Bandwidth | Chunked upload/download for large attachments | More reliable for videos and large PDFs |

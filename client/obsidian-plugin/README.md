@@ -9,8 +9,11 @@ This is the client-side plugin for the sync server in `../../server`.
 - Sync Markdown notes and binary attachments.
 - Manual sync from the Obsidian status bar icon.
 - Periodic sync and delayed auto sync after local file changes.
+- Recent sync history in settings.
 - English and Chinese settings UI.
 - Optional managed attachment folder with automatic note link rewriting.
+- Custom attachment type folder mappings.
+- Orphan attachment scanning.
 
 ## Basic Usage
 
@@ -62,6 +65,7 @@ Settings:
 | Attachment folder | Base folder for managed attachments, for example `Attachments` |
 | Attachment organization | Chooses how files are grouped under the base folder |
 | Attachment date format | Controls the date segment for date-based modes |
+| Attachment type folders | Maps extensions to type folders |
 
 Organization modes:
 
@@ -99,6 +103,20 @@ Built-in type folders:
 | `video` | `mp4`, `mov`, `mkv`, `webm`, `avi` |
 | `archives` | `zip`, `rar`, `7z`, `tar`, `gz` |
 | `files` | Other file types |
+
+Custom type folder mapping format:
+
+```text
+images: png, jpg, jpeg, gif, webp
+documents: pdf, docx, xlsx
+screenshots: png
+```
+
+If an extension appears in multiple mappings, the first matching mapping wins.
+
+## Orphan Attachments
+
+The settings page includes an orphan attachment scan. It checks files under the configured attachment folder and reports attachments that are not referenced by Markdown or wiki links in any note.
 
 ## Notes
 

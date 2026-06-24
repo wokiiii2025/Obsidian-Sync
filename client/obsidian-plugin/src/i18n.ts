@@ -56,6 +56,15 @@ type TranslationKey =
   | "settings.attachmentMode.typeDate"
   | "settings.attachmentDateFormat.name"
   | "settings.attachmentDateFormat.desc"
+  | "settings.attachmentTypeMappings.name"
+  | "settings.attachmentTypeMappings.desc"
+  | "settings.orphans.name"
+  | "settings.orphans.desc"
+  | "settings.orphans.button"
+  | "settings.orphans.none"
+  | "settings.history.name"
+  | "settings.history.desc"
+  | "settings.history.empty"
   | "settings.exclusions.name"
   | "settings.exclusions.desc"
   | "settings.manual.name"
@@ -81,7 +90,8 @@ type TranslationKey =
   | "statusbar.tooltip"
   | "statusbar.short"
   | "notice.autoSyncQueued"
-  | "notice.attachmentMoved";
+  | "notice.attachmentMoved"
+  | "notice.orphanScanComplete";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -140,6 +150,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.attachmentMode.typeDate": "By type and date",
     "settings.attachmentDateFormat.name": "Attachment date format",
     "settings.attachmentDateFormat.desc": "Used by date-based modes. Supports YYYY, MM, and DD.",
+    "settings.attachmentTypeMappings.name": "Attachment type folders",
+    "settings.attachmentTypeMappings.desc": "One mapping per line, for example: images: png, jpg, webp.",
+    "settings.orphans.name": "Orphan attachments",
+    "settings.orphans.desc": "Last scan: {time}. Orphans found: {count}.",
+    "settings.orphans.button": "Scan",
+    "settings.orphans.none": "No orphan attachments found.",
+    "settings.history.name": "Sync history",
+    "settings.history.desc": "{time} - {status} - uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}",
+    "settings.history.empty": "No sync history yet.",
     "settings.exclusions.name": "Exclusions",
     "settings.exclusions.desc": "One path or simple folder pattern per line.",
     "settings.manual.name": "Manual sync",
@@ -165,7 +184,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.tooltip": "{status}. Tracked {tracked}. Uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}.",
     "statusbar.short": "{tracked}",
     "notice.autoSyncQueued": "Sync queued after file changes.",
-    "notice.attachmentMoved": "Attachment moved to {path}."
+    "notice.attachmentMoved": "Attachment moved to {path}.",
+    "notice.orphanScanComplete": "Orphan scan complete. Found {count} attachment(s)."
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -223,6 +243,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.attachmentMode.typeDate": "按类型和日期",
     "settings.attachmentDateFormat.name": "附件日期格式",
     "settings.attachmentDateFormat.desc": "用于按日期分组，支持 YYYY、MM、DD。",
+    "settings.attachmentTypeMappings.name": "附件类型目录映射",
+    "settings.attachmentTypeMappings.desc": "每行一个映射，例如：images: png, jpg, webp。",
+    "settings.orphans.name": "孤立附件",
+    "settings.orphans.desc": "上次扫描：{time}。发现孤立附件：{count} 个。",
+    "settings.orphans.button": "扫描",
+    "settings.orphans.none": "未发现孤立附件。",
+    "settings.history.name": "同步历史",
+    "settings.history.desc": "{time} - {status} - 上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}",
+    "settings.history.empty": "暂无同步历史。",
     "settings.exclusions.name": "排除规则",
     "settings.exclusions.desc": "每行一个路径或简单文件夹模式。",
     "settings.manual.name": "手动同步",
@@ -248,7 +277,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.tooltip": "{status}。已跟踪 {tracked}。上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}。",
     "statusbar.short": "{tracked}",
     "notice.autoSyncQueued": "已在文件变化后加入同步队列。",
-    "notice.attachmentMoved": "附件已移动到 {path}。"
+    "notice.attachmentMoved": "附件已移动到 {path}。",
+    "notice.orphanScanComplete": "孤立附件扫描完成，发现 {count} 个。"
   }
 };
 

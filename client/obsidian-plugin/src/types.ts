@@ -13,6 +13,10 @@ export interface SyncStats {
   lastError: string;
 }
 
+export interface SyncHistoryEntry extends SyncStats {
+  status: SyncStatus;
+}
+
 export interface PluginSettings {
   language: Language;
   serverUrl: string;
@@ -27,11 +31,15 @@ export interface PluginSettings {
   attachmentFolder: string;
   attachmentOrganizationMode: AttachmentOrganizationMode;
   attachmentDateFormat: string;
+  attachmentTypeMappings: string;
+  lastOrphanScanAt: string;
+  orphanAttachments: string[];
   conflictMode: "auto" | "manual";
   exclusions: string;
   lastSync: string;
   lastSyncStatus: SyncStatus;
   lastSyncStats: SyncStats;
+  syncHistory: SyncHistoryEntry[];
 }
 
 export interface SyncStateEntry {
