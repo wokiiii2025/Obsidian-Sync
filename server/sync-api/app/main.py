@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,12 @@ from app.security import create_token, current_auth, hash_password, verify_herme
 from app.sync import VectorOrder, compare_vectors
 
 app = FastAPI(title="Obsidian Sync API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", response_model=HealthResponse)

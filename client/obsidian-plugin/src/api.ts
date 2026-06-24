@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import type { PushChange, PushResponse, RemoteChange } from "./types";
 
 export class SyncApi {
@@ -36,24 +37,27 @@ export class SyncApi {
   }
 
   private async request<T>(path: string, init: RequestInit & { auth?: boolean } = {}): Promise<T> {
-    const headers = new Headers(init.headers);
-    headers.set("Content-Type", "application/json");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    new Headers(init.headers).forEach((value, key) => {
+      headers[key] = value;
+    });
     if (init.auth !== false) {
       const token = this.getToken();
       if (!token) {
         throw new Error("Missing sync token");
       }
-      headers.set("Authorization", `Bearer ${token}`);
+      headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${this.getServerUrl().replace(/\/$/, "")}${path}`, {
-      ...init,
+    const response = await requestUrl({
+      url: `${this.getServerUrl().replace(/\/$/, "")}${path}`,
+      method: init.method ?? "GET",
+      body: typeof init.body === "string" ? init.body : undefined,
       headers
     });
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Sync API ${response.status}: ${body}`);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Sync API ${response.status}: ${response.text}`);
     }
-    return response.json() as Promise<T>;
+    return response.json as T;
   }
 }
