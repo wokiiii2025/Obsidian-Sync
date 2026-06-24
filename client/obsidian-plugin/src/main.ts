@@ -14,6 +14,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   autoSyncTimeoutId: number | null = null;
   syncPromise: Promise<void> | null = null;
   queuedAutoSync = false;
+  organizingAttachmentPaths = new Set<string>();
   statusBarEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -117,10 +118,13 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("create", handler));
     this.registerEvent(this.app.vault.on("modify", handler));
     this.registerEvent(this.app.vault.on("delete", handler));
-    this.registerEvent(this.app.vault.on("rename", handler));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.handleVaultChange(file, oldPath)));
   }
 
-  private handleVaultChange(file: TAbstractFile): void {
+  private handleVaultChange(file: TAbstractFile, oldPath?: string): void {
+    this.organizeAttachment(file, oldPath).catch((error) => {
+      new Notice(t(this.settings.language, "notice.prefix", { message: error.message }));
+    });
     if (!this.settings.autoSyncOnChange || !this.shouldAutoSyncFile(file)) {
       return;
     }
@@ -132,6 +136,77 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       return false;
     }
     return !this.isExcludedPath(file.path);
+  }
+
+  private async organizeAttachment(file: TAbstractFile, oldPath?: string): Promise<void> {
+    if (!this.settings.manageAttachments || !(file instanceof TFile) || file.extension === "md") {
+      return;
+    }
+    if (this.organizingAttachmentPaths.has(file.path) || this.isExcludedPath(file.path) || this.isInAttachmentFolder(file.path)) {
+      return;
+    }
+    const attachmentFolder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
+    await this.ensureVaultFolder(attachmentFolder);
+    const targetPath = await this.uniqueAttachmentPath(`${attachmentFolder}/${file.name}`);
+    this.organizingAttachmentPaths.add(file.path);
+    try {
+      const sourcePath = oldPath ?? file.path;
+      await this.app.vault.rename(file, targetPath);
+      await this.rewriteAttachmentReferences(sourcePath, targetPath);
+      new Notice(t(this.settings.language, "notice.attachmentMoved", { path: targetPath }));
+    } finally {
+      this.organizingAttachmentPaths.delete(file.path);
+      this.organizingAttachmentPaths.delete(targetPath);
+    }
+  }
+
+  private async rewriteAttachmentReferences(oldPath: string, newPath: string): Promise<void> {
+    const oldBasename = oldPath.split("/").pop() ?? oldPath;
+    const markdownFiles = this.app.vault.getMarkdownFiles().filter((file) => !this.isExcludedPath(file.path));
+    for (const file of markdownFiles) {
+      const original = await this.app.vault.read(file);
+      const updated = rewriteAttachmentLinks(original, oldPath, oldBasename, newPath);
+      if (updated !== original) {
+        await this.app.vault.modify(file, updated);
+      }
+    }
+  }
+
+  private isInAttachmentFolder(path: string): boolean {
+    const folder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
+    return path === folder || path.startsWith(`${folder}/`);
+  }
+
+  private async uniqueAttachmentPath(preferredPath: string): Promise<string> {
+    const normalized = normalizePath(preferredPath);
+    if (!this.app.vault.getAbstractFileByPath(normalized)) {
+      return normalized;
+    }
+    const slash = normalized.lastIndexOf("/");
+    const dir = slash >= 0 ? normalized.slice(0, slash) : "";
+    const filename = slash >= 0 ? normalized.slice(slash + 1) : normalized;
+    const dot = filename.lastIndexOf(".");
+    const stem = dot > 0 ? filename.slice(0, dot) : filename;
+    const ext = dot > 0 ? filename.slice(dot) : "";
+    let index = 1;
+    while (true) {
+      const candidate = `${dir ? `${dir}/` : ""}${stem}-${index}${ext}`;
+      if (!this.app.vault.getAbstractFileByPath(candidate)) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
+  private async ensureVaultFolder(folderPath: string): Promise<void> {
+    const parts = normalizePath(folderPath).split("/").filter(Boolean);
+    let current = "";
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      if (!this.app.vault.getAbstractFileByPath(current)) {
+        await this.app.vault.createFolder(current);
+      }
+    }
   }
 
   private scheduleAutoSync(): void {
@@ -352,6 +427,31 @@ class SyncSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t(language, "settings.manageAttachments.name"))
+      .setDesc(t(language, "settings.manageAttachments.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.manageAttachments)
+          .onChange(async (value) => {
+            this.plugin.settings.manageAttachments = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.attachmentFolder.name"))
+      .setDesc(t(language, "settings.attachmentFolder.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.attachmentFolder)
+          .setValue(this.plugin.settings.attachmentFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.attachmentFolder = normalizePath(value.trim() || DEFAULT_SETTINGS.attachmentFolder);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName(t(language, "settings.exclusions.name"))
       .setDesc(t(language, "settings.exclusions.desc"))
       .addTextArea((text) =>
@@ -441,4 +541,31 @@ class SyncSettingTab extends PluginSettingTab {
   private platform(): string {
     return "obsidian";
   }
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
+}
+
+function rewriteAttachmentLinks(markdown: string, oldPath: string, oldBasename: string, newPath: string): string {
+  const encodedOldPath = encodeURI(oldPath);
+  const encodedOldBasename = encodeURI(oldBasename);
+  const encodedNewPath = encodeURI(newPath);
+  let updated = markdown;
+  for (const oldTarget of uniqueStrings([oldPath, oldBasename])) {
+    updated = updated.replace(new RegExp(`(!?\\[\\[)${escapeRegExp(oldTarget)}((?:#[^\\]]+)?(?:\\|[^\\]]+)?\\]\\])`, "g"), `$1${newPath}$2`);
+  }
+  for (const oldTarget of uniqueStrings([oldPath, oldBasename, encodedOldPath, encodedOldBasename])) {
+    updated = updated.replace(new RegExp(`(\\[[^\\]]*\\]\\()${escapeRegExp(oldTarget)}((?:#[^\\)]*)?\\))`, "g"), `$1${encodedNewPath}$2`);
+    updated = updated.replace(new RegExp(`(!\\[[^\\]]*\\]\\()${escapeRegExp(oldTarget)}((?:#[^\\)]*)?\\))`, "g"), `$1${encodedNewPath}$2`);
+  }
+  return updated;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

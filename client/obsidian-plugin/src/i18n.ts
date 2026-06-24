@@ -44,6 +44,10 @@ type TranslationKey =
   | "settings.autoSync.desc"
   | "settings.autoSyncDebounce.name"
   | "settings.autoSyncDebounce.desc"
+  | "settings.manageAttachments.name"
+  | "settings.manageAttachments.desc"
+  | "settings.attachmentFolder.name"
+  | "settings.attachmentFolder.desc"
   | "settings.exclusions.name"
   | "settings.exclusions.desc"
   | "settings.manual.name"
@@ -68,7 +72,8 @@ type TranslationKey =
   | "statusbar.aria"
   | "statusbar.tooltip"
   | "statusbar.short"
-  | "notice.autoSyncQueued";
+  | "notice.autoSyncQueued"
+  | "notice.attachmentMoved";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -115,6 +120,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.autoSync.desc": "Automatically sync after notes or attachment files are created, edited, renamed, or deleted.",
     "settings.autoSyncDebounce.name": "File-change delay",
     "settings.autoSyncDebounce.desc": "Seconds to wait after the last file change before syncing.",
+    "settings.manageAttachments.name": "Manage attachments",
+    "settings.manageAttachments.desc": "Move images and other attachments into one folder and rewrite note links to that path.",
+    "settings.attachmentFolder.name": "Attachment folder",
+    "settings.attachmentFolder.desc": "Folder used for images, PDFs, audio, video, and other non-note files.",
     "settings.exclusions.name": "Exclusions",
     "settings.exclusions.desc": "One path or simple folder pattern per line.",
     "settings.manual.name": "Manual sync",
@@ -139,7 +148,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.aria": "Zero Knowledge Sync",
     "statusbar.tooltip": "{status}. Tracked {tracked}. Uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}.",
     "statusbar.short": "{tracked}",
-    "notice.autoSyncQueued": "Sync queued after file changes."
+    "notice.autoSyncQueued": "Sync queued after file changes.",
+    "notice.attachmentMoved": "Attachment moved to {path}."
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -185,6 +195,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.autoSync.desc": "笔记或附件文件新建、编辑、重命名或删除后自动同步。",
     "settings.autoSyncDebounce.name": "文件变化延迟",
     "settings.autoSyncDebounce.desc": "最后一次文件变化后等待多少秒再同步。",
+    "settings.manageAttachments.name": "统一管理附件",
+    "settings.manageAttachments.desc": "将图片和其他附件移动到统一目录，并把笔记链接改写为该目录路径。",
+    "settings.attachmentFolder.name": "附件目录",
+    "settings.attachmentFolder.desc": "用于存放图片、PDF、音频、视频和其他非笔记文件的目录。",
     "settings.exclusions.name": "排除规则",
     "settings.exclusions.desc": "每行一个路径或简单文件夹模式。",
     "settings.manual.name": "手动同步",
@@ -209,7 +223,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "statusbar.aria": "Zero Knowledge Sync",
     "statusbar.tooltip": "{status}。已跟踪 {tracked}。上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}。",
     "statusbar.short": "{tracked}",
-    "notice.autoSyncQueued": "已在文件变化后加入同步队列。"
+    "notice.autoSyncQueued": "已在文件变化后加入同步队列。",
+    "notice.attachmentMoved": "附件已移动到 {path}。"
   }
 };
 

@@ -22,6 +22,8 @@ export interface PluginSettings {
   syncIntervalSeconds: number;
   autoSyncOnChange: boolean;
   autoSyncDebounceSeconds: number;
+  manageAttachments: boolean;
+  attachmentFolder: string;
   conflictMode: "auto" | "manual";
   exclusions: string;
   lastSync: string;

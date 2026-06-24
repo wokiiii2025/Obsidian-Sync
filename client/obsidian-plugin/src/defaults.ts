@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
   autoSyncDebounceSeconds: 60,
+  manageAttachments: true,
+  attachmentFolder: "Attachments",
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
   lastSync: "",
