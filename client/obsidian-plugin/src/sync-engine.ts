@@ -83,10 +83,10 @@ export class SyncEngine {
     if (!change.path_hash || !change.encrypted_path || !change.encrypted_content || !change.encrypted_dek || !change.version_vector) {
       return;
     }
-    const decrypted = await this.crypto.decryptRemote(change.path_hash, change.encrypted_path, change.encrypted_content, change.encrypted_dek);
+    const decrypted = await this.crypto.decryptRemoteFile(change.path_hash, change.encrypted_path, change.encrypted_content, change.encrypted_dek);
     const existing = this.vault.getAbstractFileByPath(decrypted.path);
     if (existing && "extension" in existing) {
-      await this.vault.modify(existing as TFile, decrypted.content);
+      await this.vault.modifyBinary(existing as TFile, decrypted.content.buffer as ArrayBuffer);
       state.notes[decrypted.path] = {
         pathHash: change.path_hash,
         versionVector: change.version_vector,
@@ -95,7 +95,7 @@ export class SyncEngine {
       return;
     }
     await this.ensureParentFolder(decrypted.path);
-    const created = await this.vault.create(decrypted.path, decrypted.content);
+    const created = await this.vault.createBinary(decrypted.path, decrypted.content.buffer as ArrayBuffer);
     state.notes[decrypted.path] = {
       pathHash: change.path_hash,
       versionVector: change.version_vector,
@@ -117,15 +117,15 @@ export class SyncEngine {
 
   private async pushLocalChanges(state: SyncState): Promise<void> {
     const changes: PushChange[] = [];
-    const files = this.vault.getMarkdownFiles().filter((file) => !this.isExcluded(file.path));
+    const files = this.vault.getFiles().filter((file) => !this.isExcluded(file.path));
 
     for (const file of files) {
       const tracked = state.notes[file.path];
       if (tracked && tracked.modifiedTime >= file.stat.mtime) {
         continue;
       }
-      const content = await this.vault.read(file);
-      const encrypted = await this.crypto.encryptNote(file.path, content);
+      const content = new Uint8Array(await this.vault.readBinary(file));
+      const encrypted = await this.crypto.encryptFile(file.path, content);
       const versionVector = { ...(tracked?.versionVector ?? {}) };
       versionVector[this.settings.deviceId] = (versionVector[this.settings.deviceId] ?? 0) + 1;
       changes.push({
@@ -136,7 +136,7 @@ export class SyncEngine {
         version_vector: versionVector,
         operation: tracked ? "update" : "create",
         file_size: file.stat.size,
-        mime_type: "text/markdown"
+        mime_type: mimeTypeForPath(file.path)
       });
       state.notes[file.path] = {
         pathHash: encrypted.pathHash,
@@ -175,10 +175,10 @@ export class SyncEngine {
       if (!conflict.encrypted_content || !conflict.encrypted_dek) {
         continue;
       }
-      const remote = await this.crypto.decryptRemote(conflict.path_hash, conflict.encrypted_path, conflict.encrypted_content, conflict.encrypted_dek);
-      const conflictPath = `${CONFLICT_DIR}/${remote.path.replace(/[\\/]/g, "-")}-${Date.now()}.md`;
+      const remote = await this.crypto.decryptRemoteFile(conflict.path_hash, conflict.encrypted_path, conflict.encrypted_content, conflict.encrypted_dek);
+      const conflictPath = `${CONFLICT_DIR}/${remote.path.replace(/[\\/]/g, "-")}-${Date.now()}`;
       await this.ensureParentFolder(conflictPath);
-      await this.vault.create(conflictPath, remote.content);
+      await this.vault.createBinary(conflictPath, remote.content.buffer as ArrayBuffer);
     }
     if (response.conflicts.length > 0) {
       new Notice(t(this.settings.language, "notice.conflicts", { count: response.conflicts.length }));
@@ -206,4 +206,25 @@ export class SyncEngine {
       }
     }
   }
+}
+
+function mimeTypeForPath(path: string): string {
+  const extension = path.split(".").pop()?.toLowerCase() ?? "";
+  const types: Record<string, string> = {
+    md: "text/markdown",
+    txt: "text/plain",
+    json: "application/json",
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    mp4: "video/mp4",
+    mov: "video/quicktime"
+  };
+  return types[extension] ?? "application/octet-stream";
 }

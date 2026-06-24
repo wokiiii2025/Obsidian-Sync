@@ -36,6 +36,10 @@ export class CryptoService {
   }
 
   async encryptNote(path: string, content: string): Promise<EncryptedNote> {
+    return this.encryptFile(path, textToBytes(content));
+  }
+
+  async encryptFile(path: string, content: Uint8Array): Promise<EncryptedNote> {
     const kek = this.requireKek();
     const dek = randomBytes(KEY_LENGTH);
     const pathHashBytes = sha256(textToBytes(path));
@@ -45,7 +49,7 @@ export class CryptoService {
     return {
       pathHash,
       encryptedPath: bytesToBase64(encryptBytes(dek, textToBytes(path), aad)),
-      encryptedContent: bytesToBase64(encryptBytes(dek, textToBytes(content), aad)),
+      encryptedContent: bytesToBase64(encryptBytes(dek, content, aad)),
       encryptedDek: bytesToBase64(encryptBytes(kek, dek))
     };
   }
@@ -57,6 +61,16 @@ export class CryptoService {
     return {
       path: bytesToText(decryptBytes(dek, base64ToBytes(encryptedPath), aad)),
       content: bytesToText(decryptBytes(dek, base64ToBytes(encryptedContent), aad))
+    };
+  }
+
+  async decryptRemoteFile(pathHash: string, encryptedPath: string, encryptedContent: string, encryptedDek: string): Promise<{ path: string; content: Uint8Array }> {
+    const kek = this.requireKek();
+    const dek = decryptBytes(kek, base64ToBytes(encryptedDek));
+    const aad = textToBytes(pathHash);
+    return {
+      path: bytesToText(decryptBytes(dek, base64ToBytes(encryptedPath), aad)),
+      content: decryptBytes(dek, base64ToBytes(encryptedContent), aad)
     };
   }
 

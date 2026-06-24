@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncMode: "manual",
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
-  autoSyncDebounceSeconds: 3,
+  autoSyncDebounceSeconds: 60,
   conflictMode: "auto",
   exclusions: ".obsidian/**\n.obsidian-syncignore",
   lastSync: "",

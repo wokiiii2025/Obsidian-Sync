@@ -128,7 +128,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   private shouldAutoSyncFile(file: TAbstractFile): boolean {
-    if (!(file instanceof TFile) || file.extension !== "md") {
+    if (!(file instanceof TFile)) {
       return false;
     }
     return !this.isExcludedPath(file.path);
@@ -343,10 +343,10 @@ class SyncSettingTab extends PluginSettingTab {
       .setDesc(t(language, "settings.autoSyncDebounce.desc"))
       .addText((text) =>
         text
-          .setPlaceholder("3")
+          .setPlaceholder("60")
           .setValue(String(this.plugin.settings.autoSyncDebounceSeconds))
           .onChange(async (value) => {
-            this.plugin.settings.autoSyncDebounceSeconds = Math.max(1, Number(value) || 3);
+            this.plugin.settings.autoSyncDebounceSeconds = Math.max(5, Number(value) || 60);
             await this.plugin.saveSettings();
           })
       );
