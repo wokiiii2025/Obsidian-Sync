@@ -47,7 +47,11 @@ export class SyncEngine {
       this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
       await saveSyncState(this.vault, state);
       await this.saveSettings();
-      new Notice(t(this.settings.language, "notice.syncComplete"));
+      new Notice(t(this.settings.language, "notice.syncCompleteStats", {
+        uploaded: this.settings.lastSyncStats.uploaded,
+        downloaded: this.settings.lastSyncStats.downloaded,
+        conflicts: this.settings.lastSyncStats.conflicts
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.settings.lastSyncStatus = "error";

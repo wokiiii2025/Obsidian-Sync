@@ -1,3 +1,33 @@
 .zk-sync-status {
   color: var(--text-muted);
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.zk-sync-status:hover {
+  color: var(--text-normal);
+}
+
+.zk-sync-status.is-running {
+  color: var(--interactive-accent);
+}
+
+.zk-sync-status.is-success {
+  color: var(--text-success);
+}
+
+.zk-sync-status.is-error {
+  color: var(--text-error);
+}
+
+.zk-sync-status.is-locked {
+  color: var(--text-warning);
+}
+
+.zk-sync-status-count {
+  font-size: 11px;
+  line-height: 1;
 }

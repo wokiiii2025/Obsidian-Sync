@@ -8,6 +8,7 @@ type TranslationKey =
   | "notice.syncFailed"
   | "notice.unlockFirst"
   | "notice.syncComplete"
+  | "notice.syncCompleteStats"
   | "notice.conflicts"
   | "notice.registered"
   | "notice.loggedIn"
@@ -59,7 +60,10 @@ type TranslationKey =
   | "settings.stats.started"
   | "settings.stats.finished"
   | "settings.stats.error"
-  | "settings.stats.none";
+  | "settings.stats.none"
+  | "statusbar.aria"
+  | "statusbar.tooltip"
+  | "statusbar.short";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -70,6 +74,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.syncFailed": "Zero Knowledge Sync failed: {message}",
     "notice.unlockFirst": "Zero Knowledge Sync: unlock the vault password first.",
     "notice.syncComplete": "Zero Knowledge Sync complete.",
+    "notice.syncCompleteStats": "Sync complete. Uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}.",
     "notice.conflicts": "Zero Knowledge Sync: {count} conflict copy created.",
     "notice.registered": "Zero Knowledge Sync registered.",
     "notice.loggedIn": "Zero Knowledge Sync logged in.",
@@ -121,7 +126,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.stats.started": "Last started: {time}",
     "settings.stats.finished": "Last finished: {time}",
     "settings.stats.error": "Last error: {message}",
-    "settings.stats.none": "none"
+    "settings.stats.none": "none",
+    "statusbar.aria": "Zero Knowledge Sync",
+    "statusbar.tooltip": "{status}. Tracked {tracked}. Uploaded {uploaded}, downloaded {downloaded}, conflicts {conflicts}.",
+    "statusbar.short": "{tracked}"
   },
   zh: {
     "command.syncNow": "立即同步",
@@ -131,6 +139,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "notice.syncFailed": "Zero Knowledge Sync 同步失败：{message}",
     "notice.unlockFirst": "Zero Knowledge Sync：请先解锁 Vault 密码。",
     "notice.syncComplete": "Zero Knowledge Sync 同步完成。",
+    "notice.syncCompleteStats": "同步完成。上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}。",
     "notice.conflicts": "Zero Knowledge Sync：已创建 {count} 个冲突副本。",
     "notice.registered": "Zero Knowledge Sync 注册成功。",
     "notice.loggedIn": "Zero Knowledge Sync 登录成功。",
@@ -182,7 +191,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.stats.started": "上次开始：{time}",
     "settings.stats.finished": "上次结束：{time}",
     "settings.stats.error": "最近错误：{message}",
-    "settings.stats.none": "无"
+    "settings.stats.none": "无",
+    "statusbar.aria": "Zero Knowledge Sync",
+    "statusbar.tooltip": "{status}。已跟踪 {tracked}。上传 {uploaded}，下载 {downloaded}，冲突 {conflicts}。",
+    "statusbar.short": "{tracked}"
   }
 };
 

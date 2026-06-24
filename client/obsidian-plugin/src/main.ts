@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { DEFAULT_SETTINGS } from "./defaults";
@@ -11,9 +11,25 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   crypto = new CryptoService();
   api = new SyncApi(() => this.settings.serverUrl, () => this.settings.token);
   intervalId: number | null = null;
+  statusBarEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.statusBarEl = this.addStatusBarItem();
+    this.statusBarEl.addClass("zk-sync-status");
+    this.statusBarEl.setAttribute("role", "button");
+    this.statusBarEl.setAttribute("tabindex", "0");
+    this.statusBarEl.setAttribute("aria-label", t(this.settings.language, "statusbar.aria"));
+    this.registerDomEvent(this.statusBarEl, "click", () => {
+      this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
+    });
+    this.registerDomEvent(this.statusBarEl, "keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
+      }
+    });
+    this.updateStatusBar();
     this.addSettingTab(new SyncSettingTab(this.app, this));
     this.addCommand({
       id: "zero-knowledge-sync-now",
@@ -44,16 +60,22 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.configureInterval();
+    this.updateStatusBar();
   }
 
   async unlock(password: string): Promise<void> {
     await this.crypto.unlock(password);
     new Notice(t(this.settings.language, "notice.unlocked"));
+    this.updateStatusBar();
   }
 
   async syncNow(): Promise<void> {
-    const engine = new SyncEngine(this.app.vault, this.settings, this.api, this.crypto, () => this.saveSettings());
+    const engine = new SyncEngine(this.app.vault, this.settings, this.api, this.crypto, async () => {
+      await this.saveSettings();
+      this.updateStatusBar();
+    });
     await engine.run();
+    this.updateStatusBar();
   }
 
   private configureInterval(): void {
@@ -68,6 +90,46 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.intervalId = window.setInterval(() => {
       this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
     }, seconds * 1000);
+  }
+
+  private updateStatusBar(): void {
+    if (!this.statusBarEl) {
+      return;
+    }
+    const language = this.settings.language;
+    const stats = this.settings.lastSyncStats;
+    const status = t(language, `settings.status.${this.settings.lastSyncStatus}`);
+    this.statusBarEl.empty();
+    this.statusBarEl.removeClasses(["is-running", "is-success", "is-error", "is-locked"]);
+    this.statusBarEl.addClass(`is-${this.settings.lastSyncStatus}`);
+    setIcon(this.statusBarEl, this.iconForStatus());
+    this.statusBarEl.createSpan({
+      cls: "zk-sync-status-count",
+      text: t(language, "statusbar.short", { tracked: stats.trackedNotes })
+    });
+    this.statusBarEl.title = t(language, "statusbar.tooltip", {
+      status,
+      tracked: stats.trackedNotes,
+      uploaded: stats.uploaded,
+      downloaded: stats.downloaded,
+      conflicts: stats.conflicts
+    });
+  }
+
+  private iconForStatus(): string {
+    if (this.settings.lastSyncStatus === "running") {
+      return "refresh-cw";
+    }
+    if (this.settings.lastSyncStatus === "success") {
+      return "cloud-check";
+    }
+    if (this.settings.lastSyncStatus === "error") {
+      return "cloud-alert";
+    }
+    if (this.settings.lastSyncStatus === "locked") {
+      return "lock";
+    }
+    return "cloud";
   }
 }
 
