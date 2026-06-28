@@ -259,14 +259,14 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
         await this.api.completeHermesQueueItem(item.id);
         continue;
       }
-      const targetPath = normalizePath(item.target_note_path || "Inbox/Telegram.md");
-      await this.ensureVaultFolder(parentFolder(targetPath));
-      const existing = this.app.vault.getAbstractFileByPath(targetPath);
+      const decision = await this.routeHermesItem(item, content);
+      const existing = this.app.vault.getAbstractFileByPath(decision.targetPath);
+      await this.ensureVaultFolder(parentFolder(decision.targetPath));
       if (existing instanceof TFile) {
         const original = await this.app.vault.read(existing);
-        await this.app.vault.modify(existing, `${original.trimEnd()}\n\n${content}\n`);
+        await this.app.vault.modify(existing, appendHermesBlock(original, decision.content, decision.heading));
       } else {
-        await this.app.vault.create(targetPath, `${content}\n`);
+        await this.app.vault.create(decision.targetPath, createHermesNote(decision.title, decision.content, decision.reason));
       }
       await this.api.completeHermesQueueItem(item.id);
       imported += 1;
@@ -284,6 +284,40 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       new Notice(t(this.settings.language, "notice.telegramQueueImported", { count: imported }));
     }
     return imported;
+  }
+
+  async routeHermesItem(item: HermesQueueItem, content: string): Promise<HermesRouteDecision> {
+    const normalizedContent = content.trim();
+    const index = await this.buildHermesVaultIndex();
+    const rules = parseHermesRoutingRules(this.settings.hermesAgentRoutingRules);
+    const rule = bestHermesRule(normalizedContent, rules);
+    const fallbackPath = normalizePath(item.target_note_path || this.settings.hermesAgentInboxPath || DEFAULT_SETTINGS.hermesAgentInboxPath);
+    const targetBaseFolder = rule?.targetFolder
+      || normalizePath(this.settings.hermesAgentCreateFolder || DEFAULT_SETTINGS.hermesAgentCreateFolder)
+      || parentFolder(fallbackPath);
+    const candidates = scoreHermesCandidates(normalizedContent, index, rule?.keywords ?? []);
+    const best = candidates[0];
+    const threshold = Math.max(1, Number(this.settings.hermesAgentAppendScoreThreshold) || DEFAULT_SETTINGS.hermesAgentAppendScoreThreshold);
+    if (best && best.score >= threshold) {
+      return {
+        action: "append_existing",
+        targetPath: best.note.path,
+        heading: best.heading || "Hermes",
+        title: best.note.title,
+        content: normalizedContent,
+        reason: `Matched existing note with score ${best.score}.`
+      };
+    }
+    const title = hermesTitle(normalizedContent, item.source_type || "Telegram");
+    const targetPath = await this.uniqueMarkdownPath(`${targetBaseFolder}/${title}.md`);
+    return {
+      action: "create_new",
+      targetPath,
+      heading: "Hermes",
+      title,
+      content: normalizedContent,
+      reason: rule ? `Matched route: ${rule.targetFolder}.` : "No strong existing-note match."
+    };
   }
 
   async revokeDevice(deviceId: string): Promise<void> {
@@ -539,6 +573,43 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     }
   }
 
+  private async uniqueMarkdownPath(preferredPath: string): Promise<string> {
+    const normalized = normalizePath(preferredPath.endsWith(".md") ? preferredPath : `${preferredPath}.md`);
+    if (!this.app.vault.getAbstractFileByPath(normalized)) {
+      return normalized;
+    }
+    const slash = normalized.lastIndexOf("/");
+    const dir = slash >= 0 ? normalized.slice(0, slash) : "";
+    const filename = slash >= 0 ? normalized.slice(slash + 1) : normalized;
+    const stem = filename.replace(/\.md$/i, "");
+    let index = 1;
+    while (true) {
+      const candidate = `${dir ? `${dir}/` : ""}${stem}-${index}.md`;
+      if (!this.app.vault.getAbstractFileByPath(candidate)) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
+  private async buildHermesVaultIndex(): Promise<HermesNoteIndex[]> {
+    const files = this.app.vault.getMarkdownFiles()
+      .filter((file) => !this.isExcludedPath(file.path))
+      .filter((file) => !file.path.startsWith(".obsidian-conflicts/"));
+    const index: HermesNoteIndex[] = [];
+    for (const file of files) {
+      const content = await this.app.vault.cachedRead(file);
+      index.push({
+        path: file.path,
+        title: noteTitle(file, content),
+        headings: extractHeadings(content),
+        tags: extractTags(content),
+        text: `${file.path}\n${content.slice(0, 4000)}`
+      });
+    }
+    return index;
+  }
+
   private async ensureVaultFolder(folderPath: string): Promise<void> {
     const parts = normalizePath(folderPath).split("/").filter(Boolean);
     let current = "";
@@ -787,6 +858,57 @@ class SyncSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.settings.hermesAgentIntervalSeconds))
           .onChange(async (value) => {
             this.plugin.settings.hermesAgentIntervalSeconds = Math.max(30, Number(value) || 60);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.inbox.name"))
+      .setDesc(t(language, "settings.hermesAgent.inbox.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.hermesAgentInboxPath)
+          .setValue(this.plugin.settings.hermesAgentInboxPath)
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentInboxPath = normalizePath(value.trim() || DEFAULT_SETTINGS.hermesAgentInboxPath);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.createFolder.name"))
+      .setDesc(t(language, "settings.hermesAgent.createFolder.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.hermesAgentCreateFolder)
+          .setValue(this.plugin.settings.hermesAgentCreateFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentCreateFolder = normalizePath(value.trim() || DEFAULT_SETTINGS.hermesAgentCreateFolder);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.threshold.name"))
+      .setDesc(t(language, "settings.hermesAgent.threshold.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(String(DEFAULT_SETTINGS.hermesAgentAppendScoreThreshold))
+          .setValue(String(this.plugin.settings.hermesAgentAppendScoreThreshold))
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentAppendScoreThreshold = Math.max(1, Number(value) || DEFAULT_SETTINGS.hermesAgentAppendScoreThreshold);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.rules.name"))
+      .setDesc(t(language, "settings.hermesAgent.rules.desc"))
+      .addTextArea((text) =>
+        text
+          .setValue(this.plugin.settings.hermesAgentRoutingRules)
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentRoutingRules = value;
             await this.plugin.saveSettings();
           })
       );
@@ -1240,6 +1362,34 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
 }
 
+interface HermesRouteDecision {
+  action: "append_existing" | "create_new";
+  targetPath: string;
+  heading: string;
+  title: string;
+  content: string;
+  reason: string;
+}
+
+interface HermesNoteIndex {
+  path: string;
+  title: string;
+  headings: string[];
+  tags: string[];
+  text: string;
+}
+
+interface HermesRoutingRule {
+  keywords: string[];
+  targetFolder: string;
+}
+
+interface HermesCandidateScore {
+  note: HermesNoteIndex;
+  score: number;
+  heading: string;
+}
+
 function parentFolder(path: string): string {
   const normalized = normalizePath(path);
   const slash = normalized.lastIndexOf("/");
@@ -1253,6 +1403,177 @@ function shortDeviceId(id: string): string {
 function previewText(value: string): string {
   const compact = value.replace(/\s+/g, " ").trim();
   return compact.length > 140 ? `${compact.slice(0, 140)}...` : compact;
+}
+
+function parseHermesRoutingRules(text: string): HermesRoutingRule[] {
+  return text.split(/\r?\n/)
+    .map((line): HermesRoutingRule | null => {
+      const [keywordPart, targetPart] = line.split("=>");
+      const targetFolder = normalizePath((targetPart ?? "").trim());
+      const keywords = (keywordPart ?? "")
+        .split(/[,，]/)
+        .map((keyword) => keyword.trim().toLowerCase())
+        .filter(Boolean);
+      return keywords.length > 0 && targetFolder ? { keywords, targetFolder } : null;
+    })
+    .filter((rule): rule is HermesRoutingRule => rule !== null);
+}
+
+function bestHermesRule(content: string, rules: HermesRoutingRule[]): HermesRoutingRule | null {
+  const lowered = content.toLowerCase();
+  let best: { rule: HermesRoutingRule; score: number } | null = null;
+  for (const rule of rules) {
+    const score = rule.keywords.reduce((total, keyword) => total + countKeyword(lowered, keyword), 0);
+    if (score > 0 && (!best || score > best.score)) {
+      best = { rule, score };
+    }
+  }
+  return best?.rule ?? null;
+}
+
+function scoreHermesCandidates(content: string, index: HermesNoteIndex[], routeKeywords: string[]): HermesCandidateScore[] {
+  const terms = importantTerms(content);
+  const loweredContent = content.toLowerCase();
+  return index.map((note) => {
+    const pathText = note.path.toLowerCase();
+    const titleText = note.title.toLowerCase();
+    const headingText = note.headings.join(" ").toLowerCase();
+    const tagText = note.tags.join(" ").toLowerCase();
+    const bodyText = note.text.toLowerCase();
+    let score = 0;
+    for (const keyword of routeKeywords) {
+      if (keyword && (pathText.includes(keyword) || titleText.includes(keyword) || tagText.includes(keyword))) {
+        score += 4;
+      }
+    }
+    for (const term of terms) {
+      if (titleText.includes(term)) score += 5;
+      if (pathText.includes(term)) score += 3;
+      if (tagText.includes(term)) score += 3;
+      if (headingText.includes(term)) score += 2;
+      if (bodyText.includes(term)) score += 1;
+    }
+    const heading = bestHeadingForContent(loweredContent, note.headings) || "Hermes";
+    return { note, score, heading };
+  })
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+function importantTerms(content: string): string[] {
+  const matches = content.toLowerCase().match(/[\p{L}\p{N}_-]{2,}/gu) ?? [];
+  const stopwords = new Set([
+    "telegram", "https", "http", "www", "com", "the", "and", "for", "with", "from", "this",
+    "that", "来源", "消息", "发送者", "采集日期", "链接", "附件", "文字内容"
+  ]);
+  const counts = new Map<string, number>();
+  for (const match of matches) {
+    const term = match.replace(/^#+/, "");
+    if (stopwords.has(term) || /^\d+$/.test(term) || term.length > 40) {
+      continue;
+    }
+    counts.set(term, (counts.get(term) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 18)
+    .map(([term]) => term);
+}
+
+function countKeyword(text: string, keyword: string): number {
+  if (!keyword) {
+    return 0;
+  }
+  let count = 0;
+  let index = text.indexOf(keyword);
+  while (index >= 0) {
+    count += 1;
+    index = text.indexOf(keyword, index + keyword.length);
+  }
+  return count;
+}
+
+function bestHeadingForContent(loweredContent: string, headings: string[]): string {
+  let best = "";
+  let bestScore = 0;
+  for (const heading of headings) {
+    const headingTerms = importantTerms(heading);
+    const score = headingTerms.reduce((total, term) => total + (loweredContent.includes(term) ? 1 : 0), 0);
+    if (score > bestScore) {
+      best = heading;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function appendHermesBlock(original: string, content: string, heading: string): string {
+  const block = hermesBlock(content);
+  const headingPattern = new RegExp(`(^|\\n)(#{1,6})\\s+${escapeRegExp(heading)}\\s*\\n`, "i");
+  const match = headingPattern.exec(original);
+  if (!match || typeof match.index !== "number") {
+    return `${original.trimEnd()}\n\n## ${heading}\n\n${block}\n`;
+  }
+  const headingStart = match.index + match[1].length;
+  const headingLevel = match[2].length;
+  const afterHeading = original.slice(headingStart + match[0].trimStart().length);
+  const nextHeading = new RegExp(`\\n#{1,${headingLevel}}\\s+`, "g").exec(afterHeading);
+  const insertAt = nextHeading ? headingStart + match[0].trimStart().length + nextHeading.index : original.length;
+  return `${original.slice(0, insertAt).trimEnd()}\n\n${block}\n${original.slice(insertAt)}`;
+}
+
+function createHermesNote(title: string, content: string, reason: string): string {
+  return [
+    "---",
+    "source: hermes",
+    `created: ${new Date().toISOString()}`,
+    `route_reason: ${JSON.stringify(reason)}`,
+    "---",
+    "",
+    `# ${title}`,
+    "",
+    hermesBlock(content),
+    ""
+  ].join("\n");
+}
+
+function hermesBlock(content: string): string {
+  return [`### ${new Date().toISOString()}`, "", content.trim()].join("\n");
+}
+
+function hermesTitle(content: string, sourceType: string): string {
+  const explicit = content.split(/\r?\n/)
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .find((line) => line && !line.startsWith(">") && !line.includes("Telegram "));
+  const base = explicit || `${sourceType || "Telegram"} ${new Date().toISOString().slice(0, 10)}`;
+  return sanitizeFilename(base.slice(0, 48)) || `Hermes ${new Date().toISOString().slice(0, 10)}`;
+}
+
+function sanitizeFilename(value: string): string {
+  return value.replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function noteTitle(file: TFile, content: string): string {
+  const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  return heading || file.basename;
+}
+
+function extractHeadings(content: string): string[] {
+  return [...content.matchAll(/^#{1,6}\s+(.+)$/gm)].map((match) => match[1].trim()).filter(Boolean);
+}
+
+function extractTags(content: string): string[] {
+  const tags = new Set<string>();
+  const frontmatter = content.match(/^---\n([\s\S]*?)\n---/);
+  if (frontmatter) {
+    for (const match of frontmatter[1].matchAll(/#?([\p{L}\p{N}_/-]+)/gu)) {
+      tags.add(match[1].toLowerCase());
+    }
+  }
+  for (const match of content.matchAll(/(^|\s)#([\p{L}\p{N}_/-]+)/gu)) {
+    tags.add(match[2].toLowerCase());
+  }
+  return [...tags];
 }
 
 function platformLabel(): string {

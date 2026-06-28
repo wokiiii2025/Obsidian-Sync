@@ -89,7 +89,7 @@ Current behavior:
 
 - Allowed chat filtering is controlled by `TELEGRAM_ALLOWED_CHAT_IDS`.
 - Messages are queued into the Hermes queue target note, defaulting to `Inbox/Telegram.md`.
-- The Obsidian plugin runs the local Hermes Agent automation: it can automatically import pending items into local Markdown, sync them when unlocked, and mark them as merged. Manual refresh/import remains available for diagnosis.
+- The Obsidian plugin runs the local Hermes Agent automation: it indexes local Markdown, routes pending items by keyword rules and existing-note similarity, appends to matching notes or creates new notes, syncs them when unlocked, and marks the queue items as merged. Manual refresh/import remains available for diagnosis.
 - Bot can reply with the queue id after successful intake.
 - Bot can delete the original Telegram message after successful intake if enabled.
 - Actual AI extraction is intentionally left for a later Hermes worker stage.

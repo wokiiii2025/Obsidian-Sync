@@ -35,6 +35,10 @@ export interface PluginSettings {
   autoSyncDebounceSeconds: number;
   hermesAgentEnabled: boolean;
   hermesAgentIntervalSeconds: number;
+  hermesAgentInboxPath: string;
+  hermesAgentCreateFolder: string;
+  hermesAgentRoutingRules: string;
+  hermesAgentAppendScoreThreshold: number;
   syncMarkdown: boolean;
   syncImages: boolean;
   syncDocuments: boolean;
