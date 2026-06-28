@@ -579,6 +579,11 @@ class SyncSettingTab extends PluginSettingTab {
         text
           .setPlaceholder(t(language, "settings.password.placeholder"))
           .setValue(this.password)
+          .then((component) => {
+            component.inputEl.type = "password";
+            component.inputEl.autocomplete = "current-password";
+            component.inputEl.spellcheck = false;
+          })
           .onChange((value) => {
             this.password = value;
           })
