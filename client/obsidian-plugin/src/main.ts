@@ -885,15 +885,27 @@ class SyncSettingTab extends PluginSettingTab {
         );
     }
 
+    const deviceTotal = this.plugin.devices.length;
+    const revokedDevices = this.plugin.devices.filter((device) => !!device.revoked_at).length;
+    const activeDevices = this.plugin.devices.filter((device) => !device.revoked_at).length;
     new Setting(containerEl)
       .setName(t(language, "settings.devices.name"))
-      .setDesc(t(language, "settings.devices.desc"))
+      .setDesc(t(language, "settings.devices.desc", {
+        total: deviceTotal,
+        active: activeDevices,
+        revoked: revokedDevices
+      }))
       .addButton((button) =>
         this.bindActionButton(button.setButtonText(t(language, "settings.devices.refresh")), t(language, "settings.devices.refresh"), async () => {
           await this.plugin.refreshDevices();
           this.display();
         })
       );
+    if (this.plugin.devices.length === 0) {
+      new Setting(containerEl)
+        .setName(t(language, "settings.devices.empty"))
+        .setDesc("");
+    }
     for (const device of this.plugin.devices) {
       const flags = [
         device.current ? t(language, "settings.devices.current") : "",
@@ -901,7 +913,12 @@ class SyncSettingTab extends PluginSettingTab {
       ].filter(Boolean).join(", ");
       new Setting(containerEl)
         .setName(`${device.device_name ?? device.id}${flags ? ` (${flags})` : ""}`)
-        .setDesc(`${device.platform ?? ""} ${device.last_seen ?? device.created_at}`)
+        .setDesc(t(language, "settings.devices.meta", {
+          platform: device.platform ?? "unknown",
+          lastSeen: device.last_seen ?? t(language, "settings.stats.none"),
+          createdAt: device.created_at,
+          id: shortDeviceId(device.id)
+        }))
         .addButton((button) => {
           this.bindActionButton(button.setButtonText(t(language, "settings.devices.revoke")).setDisabled(device.current || !!device.revoked_at), t(language, "settings.devices.revoke"), async () => {
             await this.plugin.revokeDevice(device.id);
@@ -983,11 +1000,11 @@ class SyncSettingTab extends PluginSettingTab {
   }
 
   private deviceName(): string {
-    return `${this.app.vault.getName()} Obsidian`;
+    return `${this.app.vault.getName()} - ${platformLabel()} - ${deviceDetail()}`;
   }
 
   private platform(): string {
-    return "obsidian";
+    return platformLabel();
   }
 
   private bindActionButton(button: { setButtonText(text: string): unknown; setDisabled(disabled: boolean): unknown; onClick(callback: () => void): unknown }, label: string, action: () => Promise<void>): unknown {
@@ -1066,6 +1083,45 @@ function parentFolder(path: string): string {
   const normalized = normalizePath(path);
   const slash = normalized.lastIndexOf("/");
   return slash > 0 ? normalized.slice(0, slash) : "";
+}
+
+function shortDeviceId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function platformLabel(): string {
+  const platform = navigator.platform.toLowerCase();
+  const userAgent = navigator.userAgent.toLowerCase();
+  if (platform.includes("win") || userAgent.includes("windows")) {
+    return "Windows";
+  }
+  if (platform.includes("mac") || userAgent.includes("mac os")) {
+    return "macOS";
+  }
+  if (platform.includes("linux") || userAgent.includes("linux")) {
+    return "Linux";
+  }
+  if (userAgent.includes("iphone") || userAgent.includes("ipad")) {
+    return "iOS";
+  }
+  if (userAgent.includes("android")) {
+    return "Android";
+  }
+  return "Obsidian";
+}
+
+function deviceDetail(): string {
+  const userAgent = navigator.userAgent;
+  const match = userAgent.match(/\(([^)]+)\)/);
+  if (!match) {
+    return "Desktop";
+  }
+  return match[1]
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(" ");
 }
 
 function rewriteAttachmentLinks(markdown: string, oldPath: string, oldBasename: string, newPath: string): string {
