@@ -40,6 +40,8 @@ Base URL: `/api/v1`
 - `POST /sync/push`
 - `POST /sync/resolve`
 - `POST /hermes/merge`
+- `GET /hermes/queue?status=pending&limit=20`
+- `POST /hermes/queue/{item_id}/complete`
 
 ## Telegram Bot intake
 
@@ -87,9 +89,10 @@ Current behavior:
 
 - Allowed chat filtering is controlled by `TELEGRAM_ALLOWED_CHAT_IDS`.
 - Messages are queued into the Hermes queue target note, defaulting to `Inbox/Telegram.md`.
+- The Obsidian plugin can refresh the queue, import pending items into local Markdown, and mark them as merged.
 - Bot can reply with the queue id after successful intake.
 - Bot can delete the original Telegram message after successful intake if enabled.
-- Actual AI extraction and merge processing is intentionally left for the Hermes worker stage.
+- Actual AI extraction is intentionally left for a later Hermes worker stage.
 
 Binary encrypted fields are encoded as base64 in JSON:
 

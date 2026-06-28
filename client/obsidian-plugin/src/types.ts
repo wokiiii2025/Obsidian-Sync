@@ -138,3 +138,13 @@ export interface DeviceInfo {
   revoked_at: string | null;
   current: boolean;
 }
+
+export interface HermesQueueItem {
+  id: number;
+  target_note_path: string | null;
+  merge_content: string | null;
+  source_url: string | null;
+  source_type: string | null;
+  status: string;
+  created_at: string;
+}

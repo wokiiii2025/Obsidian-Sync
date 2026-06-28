@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import type { DeviceInfo, NoteVersionInfo, NoteVersionPayload, PushChange, PushResponse, RemoteChange } from "./types";
+import type { DeviceInfo, HermesQueueItem, NoteVersionInfo, NoteVersionPayload, PushChange, PushResponse, RemoteChange } from "./types";
 
 export class SyncApi {
   constructor(private readonly getServerUrl: () => string, private readonly getToken: () => string) {}
@@ -57,6 +57,16 @@ export class SyncApi {
 
   async revokeDevice(deviceId: string): Promise<void> {
     await this.request(`/api/v1/devices/${deviceId}`, { method: "DELETE" });
+  }
+
+  async hermesQueue(): Promise<HermesQueueItem[]> {
+    const params = new URLSearchParams({ status: "pending", limit: "20" });
+    const response = await this.request<{ items: HermesQueueItem[] }>(`/api/v1/hermes/queue?${params.toString()}`);
+    return response.items;
+  }
+
+  async completeHermesQueueItem(itemId: number): Promise<void> {
+    await this.request(`/api/v1/hermes/queue/${itemId}/complete`, { method: "POST" });
   }
 
   async request<T>(path: string, init: RequestInit & { auth?: boolean } = {}): Promise<T> {

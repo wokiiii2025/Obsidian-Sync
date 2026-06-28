@@ -5,7 +5,7 @@ import { CONFLICT_DIR, DEFAULT_SETTINGS } from "./defaults";
 import { isFileTypeSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
-import type { AttachmentOrganizationMode, DeviceInfo, Language, NoteVersionInfo, PluginSettings } from "./types";
+import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
 
 export default class ZeroKnowledgeSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -20,6 +20,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   statusBarEl: HTMLElement | null = null;
   activeFileVersions: NoteVersionInfo[] = [];
   devices: DeviceInfo[] = [];
+  telegramQueueItems: HermesQueueItem[] = [];
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -76,6 +77,14 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       callback: () => {
         new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.devices.refresh") }));
         this.refreshDevices().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }
+    });
+    this.addCommand({
+      id: "zero-knowledge-sync-import-telegram-queue",
+      name: t(this.settings.language, "settings.telegram.import.name"),
+      callback: () => {
+        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.telegram.import.button") }));
+        this.importTelegramQueue().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
     this.registerFileWatchers();
@@ -221,6 +230,41 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.devices = await this.api.devices();
     new Notice(t(this.settings.language, "notice.devicesLoaded", { count: this.devices.length }));
     return this.devices;
+  }
+
+  async loadTelegramQueue(): Promise<HermesQueueItem[]> {
+    this.telegramQueueItems = await this.api.hermesQueue();
+    new Notice(t(this.settings.language, "notice.telegramQueueLoaded", { count: this.telegramQueueItems.length }));
+    return this.telegramQueueItems;
+  }
+
+  async importTelegramQueue(): Promise<number> {
+    const items = await this.api.hermesQueue();
+    let imported = 0;
+    for (const item of items) {
+      const content = item.merge_content?.trim();
+      if (!content) {
+        await this.api.completeHermesQueueItem(item.id);
+        continue;
+      }
+      const targetPath = normalizePath(item.target_note_path || "Inbox/Telegram.md");
+      await this.ensureVaultFolder(parentFolder(targetPath));
+      const existing = this.app.vault.getAbstractFileByPath(targetPath);
+      if (existing instanceof TFile) {
+        const original = await this.app.vault.read(existing);
+        await this.app.vault.modify(existing, `${original.trimEnd()}\n\n${content}\n`);
+      } else {
+        await this.app.vault.create(targetPath, `${content}\n`);
+      }
+      await this.api.completeHermesQueueItem(item.id);
+      imported += 1;
+    }
+    this.telegramQueueItems = [];
+    if (imported > 0) {
+      this.scheduleAutoSync();
+    }
+    new Notice(t(this.settings.language, "notice.telegramQueueImported", { count: imported }));
+    return imported;
   }
 
   async revokeDevice(deviceId: string): Promise<void> {
@@ -822,6 +866,32 @@ class SyncSettingTab extends PluginSettingTab {
         })
       );
 
+    new Setting(containerEl)
+      .setName(t(language, "settings.telegram.import.name"))
+      .setDesc(t(language, "settings.telegram.import.desc", { count: this.plugin.telegramQueueItems.length }))
+      .addButton((button) =>
+        this.bindActionButton(button.setButtonText(t(language, "settings.telegram.import.refresh")), t(language, "settings.telegram.import.refresh"), async () => {
+          await this.plugin.loadTelegramQueue();
+          this.display();
+        })
+      )
+      .addButton((button) =>
+        this.bindActionButton(button.setButtonText(t(language, "settings.telegram.import.button")).setCta(), t(language, "settings.telegram.import.button"), async () => {
+          await this.plugin.importTelegramQueue();
+          this.display();
+        })
+      );
+    if (this.plugin.telegramQueueItems.length === 0) {
+      new Setting(containerEl)
+        .setName(t(language, "settings.telegram.import.empty"))
+        .setDesc("");
+    }
+    for (const item of this.plugin.telegramQueueItems.slice(0, 5)) {
+      new Setting(containerEl)
+        .setName(`${item.created_at} - ${item.target_note_path || "Inbox/Telegram.md"}`)
+        .setDesc(previewText(item.merge_content || ""));
+    }
+
     const stats = this.plugin.settings.lastSyncStats;
     const status = t(language, `settings.status.${this.plugin.settings.lastSyncStatus}`);
     new Setting(containerEl)
@@ -1092,6 +1162,11 @@ function parentFolder(path: string): string {
 
 function shortDeviceId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
+}
+
+function previewText(value: string): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > 140 ? `${compact.slice(0, 140)}...` : compact;
 }
 
 function platformLabel(): string {

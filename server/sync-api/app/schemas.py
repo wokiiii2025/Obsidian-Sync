@@ -124,6 +124,24 @@ class HermesMergeResponse(BaseModel):
     queue_id: int
 
 
+class HermesQueueItem(BaseModel):
+    id: int
+    target_note_path: str | None
+    merge_content: str | None
+    source_url: str | None
+    source_type: str | None
+    status: str
+    created_at: datetime
+
+
+class HermesQueueResponse(BaseModel):
+    items: list[HermesQueueItem]
+
+
+class HermesQueueCompleteResponse(BaseModel):
+    status: str
+
+
 class HealthResponse(BaseModel):
     status: str
 

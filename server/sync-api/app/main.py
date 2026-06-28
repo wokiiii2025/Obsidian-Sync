@@ -18,6 +18,9 @@ from app.schemas import (
     HealthResponse,
     HermesMergeRequest,
     HermesMergeResponse,
+    HermesQueueCompleteResponse,
+    HermesQueueItem,
+    HermesQueueResponse,
     LoginRequest,
     LoginResponse,
     NoteVersionInfo,
@@ -413,6 +416,48 @@ async def hermes_merge(payload: HermesMergeRequest, session: AsyncSession = Depe
     session.add(item)
     await session.commit()
     return HermesMergeResponse(status=item.status, queue_id=item.id)
+
+
+@app.get("/api/v1/hermes/queue", response_model=HermesQueueResponse)
+async def hermes_queue(
+    auth: Annotated[tuple, Depends(current_auth)],
+    status_filter: str = Query(default="pending", alias="status"),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> HermesQueueResponse:
+    vault_id, _device_id, session = auth
+    query = (
+        select(HermesQueue)
+        .where(HermesQueue.vault_id == vault_id, HermesQueue.status == status_filter)
+        .order_by(HermesQueue.created_at.asc(), HermesQueue.id.asc())
+        .limit(limit)
+    )
+    items = (await session.execute(query)).scalars().all()
+    return HermesQueueResponse(
+        items=[
+            HermesQueueItem(
+                id=item.id,
+                target_note_path=item.target_note_path,
+                merge_content=item.merge_content,
+                source_url=item.source_url,
+                source_type=item.source_type,
+                status=item.status,
+                created_at=item.created_at,
+            )
+            for item in items
+        ]
+    )
+
+
+@app.post("/api/v1/hermes/queue/{item_id}/complete", response_model=HermesQueueCompleteResponse)
+async def hermes_queue_complete(item_id: int, auth: Annotated[tuple, Depends(current_auth)]) -> HermesQueueCompleteResponse:
+    vault_id, _device_id, session = auth
+    item = await session.get(HermesQueue, item_id)
+    if item is None or item.vault_id != vault_id:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+    item.status = "merged"
+    item.merged_at = datetime.now(UTC)
+    await session.commit()
+    return HermesQueueCompleteResponse(status=item.status)
 
 
 async def _get_note_by_path_hash(session: AsyncSession, vault_id, path_hash: str) -> Note | None:
