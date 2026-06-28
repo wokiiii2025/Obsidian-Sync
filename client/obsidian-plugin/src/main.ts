@@ -2,7 +2,7 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, T
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
-import { isFileTypeSyncEnabled, isManagedAttachmentExtension } from "./file-policy";
+import { isManagedAttachmentExtension, isPathSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
 import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
@@ -536,7 +536,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     if (!(file instanceof TFile)) {
       return false;
     }
-    return !this.isExcludedPath(file.path) && isFileTypeSyncEnabled(file.extension, this.settings);
+    return !this.isExcludedPath(file.path) && isPathSyncEnabled(file.path, file.extension, this.settings);
   }
 
   private async promptInitialAttachmentOrganization(): Promise<void> {
@@ -1075,6 +1075,7 @@ class SyncSettingTab extends PluginSettingTab {
     this.addSelectiveToggle(containerEl, "settings.selective.video", "syncVideo");
     this.addSelectiveToggle(containerEl, "settings.selective.archives", "syncArchives");
     this.addSelectiveToggle(containerEl, "settings.selective.other", "syncOtherFiles");
+    this.addSelectiveToggle(containerEl, "settings.selective.obsidianConfig", "syncObsidianConfig");
 
     new Setting(containerEl)
       .setName(t(language, "settings.exclusions.name"))
@@ -1431,7 +1432,7 @@ class SyncSettingTab extends PluginSettingTab {
     });
   }
 
-  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncJson" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles">): void {
+  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncJson" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles" | "syncObsidianConfig">): void {
     const language = this.plugin.settings.language;
     new Setting(containerEl)
       .setName(t(language, labelKey))

@@ -49,6 +49,13 @@ export function isFileTypeSyncEnabled(extension: string, settings: PluginSetting
   }
 }
 
+export function isPathSyncEnabled(path: string, extension: string, settings: PluginSettings): boolean {
+  if (path === ".obsidian" || path.startsWith(".obsidian/")) {
+    return settings.syncObsidianConfig;
+  }
+  return isFileTypeSyncEnabled(extension, settings);
+}
+
 export function isManagedAttachmentExtension(extension: string): boolean {
   const category = fileCategory(extension);
   return !["markdown", "data"].includes(category);

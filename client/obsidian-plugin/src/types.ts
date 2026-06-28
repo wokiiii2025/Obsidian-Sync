@@ -52,6 +52,7 @@ export interface PluginSettings {
   syncVideo: boolean;
   syncArchives: boolean;
   syncOtherFiles: boolean;
+  syncObsidianConfig: boolean;
   manageAttachments: boolean;
   attachmentFolder: string;
   attachmentOrganizationMode: AttachmentOrganizationMode;

@@ -3,7 +3,7 @@ import { CONFLICT_DIR, PROTECTED_EXCLUSIONS } from "./defaults";
 import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
-import { isFileTypeSyncEnabled } from "./file-policy";
+import { isPathSyncEnabled } from "./file-policy";
 import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
@@ -98,7 +98,7 @@ export class SyncEngine {
       return;
     }
     const decrypted = await this.crypto.decryptRemoteFile(change.path_hash, change.encrypted_path, change.encrypted_content, change.encrypted_dek);
-    if (!isFileTypeSyncEnabled(extensionForPath(decrypted.path), this.settings)) {
+    if (!isPathSyncEnabled(decrypted.path, extensionForPath(decrypted.path), this.settings)) {
       return;
     }
     const existing = this.vault.getAbstractFileByPath(decrypted.path);
@@ -135,7 +135,7 @@ export class SyncEngine {
     if (!path) {
       return;
     }
-    if (!isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
+    if (!isPathSyncEnabled(path, extensionForPath(path), this.settings)) {
       return;
     }
     const existing = this.vault.getAbstractFileByPath(path);
@@ -181,7 +181,7 @@ export class SyncEngine {
       if (this.isExcluded(path)) {
         continue;
       }
-      if (!isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
+      if (!isPathSyncEnabled(path, extensionForPath(path), this.settings)) {
         continue;
       }
       if (this.vault.getAbstractFileByPath(path) || await this.vault.adapter.exists(path)) {
@@ -257,7 +257,7 @@ export class SyncEngine {
   private async listLocalSyncFiles(): Promise<LocalSyncFile[]> {
     const files = new Map<string, LocalSyncFile>();
     for (const file of this.vault.getFiles()) {
-      if (!this.isExcluded(file.path) && isFileTypeSyncEnabled(file.extension, this.settings)) {
+      if (!this.isExcluded(file.path) && isPathSyncEnabled(file.path, file.extension, this.settings)) {
         files.set(file.path, {
           path: file.path,
           extension: file.extension,
@@ -268,7 +268,7 @@ export class SyncEngine {
       }
     }
     for (const path of await this.listAdapterFiles(".obsidian")) {
-      if (files.has(path) || this.isExcluded(path) || !isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
+      if (files.has(path) || this.isExcluded(path) || !isPathSyncEnabled(path, extensionForPath(path), this.settings)) {
         continue;
       }
       const stat = await this.vault.adapter.stat(path);

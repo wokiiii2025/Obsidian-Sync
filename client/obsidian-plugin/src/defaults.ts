@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncVideo: true,
   syncArchives: true,
   syncOtherFiles: true,
+  syncObsidianConfig: true,
   manageAttachments: true,
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",
