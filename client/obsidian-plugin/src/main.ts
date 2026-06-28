@@ -252,6 +252,18 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     new Notice(t(this.settings.language, "notice.conflictRestored"));
   }
 
+  async fullResync(): Promise<void> {
+    this.settings.lastSync = "";
+    this.settings.lastSyncStatus = "idle";
+    this.settings.lastSyncStats.lastError = "";
+    if (await this.app.vault.adapter.exists(".obsidian/zero-knowledge-sync-state.json")) {
+      await this.app.vault.adapter.remove(".obsidian/zero-knowledge-sync-state.json");
+    }
+    await this.saveSettings();
+    new Notice(t(this.settings.language, "notice.fullSyncStarted"));
+    await this.syncNow();
+  }
+
   async syncNow(): Promise<void> {
     if (this.syncPromise) {
       return this.syncPromise;
@@ -791,6 +803,16 @@ class SyncSettingTab extends PluginSettingTab {
       .addButton((button) =>
         this.bindActionButton(button.setButtonText(t(language, "settings.manual.button")).setCta(), t(language, "settings.manual.button"), async () => {
           await this.plugin.syncNow();
+          this.display();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.fullSync.name"))
+      .setDesc(t(language, "settings.fullSync.desc"))
+      .addButton((button) =>
+        this.bindActionButton(button.setButtonText(t(language, "settings.fullSync.button")), t(language, "settings.fullSync.button"), async () => {
+          await this.plugin.fullResync();
           this.display();
         })
       );
