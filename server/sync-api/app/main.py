@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -7,7 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import engine, get_session
+from app.config import get_settings
+from app.database import SessionLocal, engine, get_session
+from app.hermes_agent import run_hermes_agent_loop
 from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 from app.schemas import (
     AcceptedChange,
@@ -40,6 +45,8 @@ from app.security import create_token, current_auth, hash_password, verify_herme
 from app.sync import VectorOrder, compare_vectors
 
 app = FastAPI(title="Obsidian Sync API", version="0.1.0")
+hermes_agent_task: asyncio.Task | None = None
+logger = logging.getLogger("obsidian-sync-api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,6 +57,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def migrate_schema() -> None:
+    global hermes_agent_task
     async with engine.begin() as conn:
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
         await conn.execute(
@@ -75,6 +83,19 @@ async def migrate_schema() -> None:
         )
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_versions_note_time ON note_versions(note_id, created_at DESC)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_versions_vault_time ON note_versions(vault_id, created_at DESC)"))
+    settings = get_settings()
+    if settings.hermes_agent_enabled and settings.hermes_agent_vault_id and settings.hermes_agent_vault_password:
+        hermes_agent_task = asyncio.create_task(run_hermes_agent_loop(settings, SessionLocal))
+    elif settings.hermes_agent_enabled:
+        logger.warning("Hermes Agent enabled but HERMES_AGENT_VAULT_ID or HERMES_AGENT_VAULT_PASSWORD is missing.")
+
+
+@app.on_event("shutdown")
+async def stop_hermes_agent() -> None:
+    if hermes_agent_task:
+        hermes_agent_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await hermes_agent_task
 
 
 @app.get("/health", response_model=HealthResponse)

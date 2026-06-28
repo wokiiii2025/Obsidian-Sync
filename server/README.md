@@ -67,6 +67,29 @@ TELEGRAM_POLLING_ENABLED=true
 TELEGRAM_SKIP_PENDING_ON_START=true
 ```
 
+## Server-side Hermes Agent
+
+For fully automatic processing without keeping Obsidian open, enable the server-side Hermes Agent in the Sync API service. This gives the server-side agent vault encryption access, so it changes the security model from strict zero-knowledge to an explicitly authorized server agent.
+
+```bash
+HERMES_AGENT_ENABLED=true
+HERMES_AGENT_VAULT_ID=<vault-uuid>
+HERMES_AGENT_VAULT_PASSWORD=<vault-password>
+HERMES_AGENT_INTERVAL_SECONDS=60
+HERMES_AGENT_CREATE_FOLDER=Inbox/Hermes
+HERMES_AGENT_INBOX_PATH=Inbox/Telegram.md
+HERMES_AGENT_APPEND_SCORE_THRESHOLD=6
+```
+
+When enabled, the agent:
+
+- consumes pending Hermes queue items automatically;
+- decrypts the vault index using the configured vault password;
+- routes content by keyword rules and existing-note similarity;
+- appends to matching Markdown notes or creates new notes;
+- encrypts the result using the same client-compatible format;
+- writes note versions and sync logs so other devices download the change.
+
 Recommended first-run mode is polling. It does not require an HTTPS domain; the server actively pulls updates from Telegram.
 
 Webhook endpoint:
@@ -89,7 +112,8 @@ Current behavior:
 
 - Allowed chat filtering is controlled by `TELEGRAM_ALLOWED_CHAT_IDS`.
 - Messages are queued into the Hermes queue target note, defaulting to `Inbox/Telegram.md`.
-- The Obsidian plugin runs the local Hermes Agent automation: it indexes local Markdown, routes pending items by keyword rules and existing-note similarity, appends to matching notes or creates new notes, syncs them when unlocked, and marks the queue items as merged. Manual refresh/import remains available for diagnosis.
+- If the server-side Hermes Agent is enabled, it automatically routes, merges, encrypts, and syncs queued items without Obsidian being open.
+- If the server-side Hermes Agent is disabled, the Obsidian plugin can run the local Hermes Agent automation while Obsidian is open and unlocked.
 - Bot can reply with the queue id after successful intake.
 - Bot can delete the original Telegram message after successful intake if enabled.
 - Actual AI extraction is intentionally left for a later Hermes worker stage.
