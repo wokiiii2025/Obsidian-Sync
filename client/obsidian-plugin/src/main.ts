@@ -28,6 +28,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.registerExtensions(["json"], "markdown");
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("zk-sync-status");
     this.statusBarEl.setAttribute("role", "button");
