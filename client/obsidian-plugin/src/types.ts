@@ -40,6 +40,7 @@ export interface PluginSettings {
   hermesAgentRoutingRules: string;
   hermesAgentAppendScoreThreshold: number;
   syncMarkdown: boolean;
+  syncJson: boolean;
   syncImages: boolean;
   syncDocuments: boolean;
   syncAudio: boolean;

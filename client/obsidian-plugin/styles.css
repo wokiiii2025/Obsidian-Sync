@@ -31,3 +31,33 @@
   font-size: 11px;
   line-height: 1;
 }
+
+.zk-sync-settings-tabs {
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 10px;
+  padding-bottom: 8px;
+}
+
+.zk-sync-settings-tab {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 10px;
+}
+
+.zk-sync-settings-tab:hover {
+  color: var(--text-normal);
+}
+
+.zk-sync-settings-tab.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}

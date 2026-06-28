@@ -1,16 +1,19 @@
 import type { PluginSettings } from "./types";
 
-export type FileCategory = "markdown" | "images" | "documents" | "audio" | "video" | "archives" | "other";
+export type FileCategory = "markdown" | "data" | "images" | "documents" | "audio" | "video" | "archives" | "other";
 
 export function fileCategory(extension: string): FileCategory {
   const ext = extension.toLowerCase();
   if (ext === "md") {
     return "markdown";
   }
+  if (ext === "json") {
+    return "data";
+  }
   if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"].includes(ext)) {
     return "images";
   }
-  if (["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "csv", "txt", "json"].includes(ext)) {
+  if (["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "csv", "txt"].includes(ext)) {
     return "documents";
   }
   if (["mp3", "wav", "m4a", "flac", "ogg", "aac"].includes(ext)) {
@@ -29,6 +32,8 @@ export function isFileTypeSyncEnabled(extension: string, settings: PluginSetting
   switch (fileCategory(extension)) {
     case "markdown":
       return settings.syncMarkdown;
+    case "data":
+      return settings.syncJson;
     case "images":
       return settings.syncImages;
     case "documents":
@@ -42,4 +47,9 @@ export function isFileTypeSyncEnabled(extension: string, settings: PluginSetting
     default:
       return settings.syncOtherFiles;
   }
+}
+
+export function isManagedAttachmentExtension(extension: string): boolean {
+  const category = fileCategory(extension);
+  return !["markdown", "data"].includes(category);
 }

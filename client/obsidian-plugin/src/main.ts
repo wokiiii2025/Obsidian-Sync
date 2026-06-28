@@ -2,7 +2,7 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, T
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { CONFLICT_DIR, DEFAULT_SETTINGS } from "./defaults";
-import { isFileTypeSyncEnabled } from "./file-policy";
+import { isFileTypeSyncEnabled, isManagedAttachmentExtension } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
 import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
@@ -144,7 +144,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       }
     }
     const orphanAttachments = this.app.vault.getFiles()
-      .filter((file) => file.extension !== "md")
+      .filter((file) => isManagedAttachmentExtension(file.extension))
       .filter((file) => !this.isExcludedPath(file.path))
       .filter((file) => file.path.startsWith(`${folder}/`))
       .filter((file) => {
@@ -493,13 +493,13 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   private unmanagedAttachmentFiles(): TFile[] {
     return this.app.vault.getFiles()
-      .filter((file) => file.extension !== "md")
+      .filter((file) => isManagedAttachmentExtension(file.extension))
       .filter((file) => !this.isExcludedPath(file.path))
       .filter((file) => !this.isInAttachmentFolder(file.path));
   }
 
   private async organizeAttachment(file: TAbstractFile, oldPath?: string): Promise<void> {
-    if (!this.settings.manageAttachments || !(file instanceof TFile) || file.extension === "md") {
+    if (!this.settings.manageAttachments || !(file instanceof TFile) || !isManagedAttachmentExtension(file.extension)) {
       return;
     }
     if (this.organizingAttachmentPaths.has(file.path) || this.isExcludedPath(file.path) || this.isInAttachmentFolder(file.path)) {
@@ -695,8 +695,11 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 }
 
+type SettingsTabId = "account" | "sync" | "files" | "attachments" | "hermes" | "status" | "devices";
+
 class SyncSettingTab extends PluginSettingTab {
   private password = "";
+  private activeTab: SettingsTabId = "account";
 
   constructor(app: App, private readonly plugin: ZeroKnowledgeSyncPlugin) {
     super(app, plugin);
@@ -722,6 +725,9 @@ class SyncSettingTab extends PluginSettingTab {
           })
       );
 
+    this.renderTabNav(containerEl, language);
+
+    if (this.activeTab === "account") {
     new Setting(containerEl)
       .setName(t(language, "settings.serverUrl.name"))
       .setDesc(t(language, "settings.serverUrl.desc"))
@@ -785,7 +791,9 @@ class SyncSettingTab extends PluginSettingTab {
       .addButton((button) =>
         this.bindActionButton(button.setButtonText(t(language, "settings.unlock.button")), t(language, "settings.unlock.button"), async () => this.withPassword(() => this.plugin.unlock(this.password)))
       );
+    }
 
+    if (this.activeTab === "sync") {
     new Setting(containerEl)
       .setName(t(language, "settings.syncMode.name"))
       .addDropdown((dropdown) =>
@@ -836,7 +844,9 @@ class SyncSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+    }
 
+    if (this.activeTab === "hermes") {
     new Setting(containerEl)
       .setName(t(language, "settings.hermesAgent.enabled.name"))
       .setDesc(t(language, "settings.hermesAgent.enabled.desc"))
@@ -912,11 +922,14 @@ class SyncSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+    }
 
+    if (this.activeTab === "files") {
     new Setting(containerEl)
       .setName(t(language, "settings.selective.name"))
       .setDesc(t(language, "settings.selective.desc"));
     this.addSelectiveToggle(containerEl, "settings.selective.markdown", "syncMarkdown");
+    this.addSelectiveToggle(containerEl, "settings.selective.json", "syncJson");
     this.addSelectiveToggle(containerEl, "settings.selective.images", "syncImages");
     this.addSelectiveToggle(containerEl, "settings.selective.documents", "syncDocuments");
     this.addSelectiveToggle(containerEl, "settings.selective.audio", "syncAudio");
@@ -924,6 +937,20 @@ class SyncSettingTab extends PluginSettingTab {
     this.addSelectiveToggle(containerEl, "settings.selective.archives", "syncArchives");
     this.addSelectiveToggle(containerEl, "settings.selective.other", "syncOtherFiles");
 
+    new Setting(containerEl)
+      .setName(t(language, "settings.exclusions.name"))
+      .setDesc(t(language, "settings.exclusions.desc"))
+      .addTextArea((text) =>
+        text
+          .setValue(this.plugin.settings.exclusions)
+          .onChange(async (value) => {
+            this.plugin.settings.exclusions = value;
+            await this.plugin.saveSettings();
+          })
+      );
+    }
+
+    if (this.activeTab === "attachments") {
     new Setting(containerEl)
       .setName(t(language, "settings.manageAttachments.name"))
       .setDesc(t(language, "settings.manageAttachments.desc"))
@@ -1041,19 +1068,9 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(t(language, "settings.orphans.none"))
         .setDesc("");
     }
+    }
 
-    new Setting(containerEl)
-      .setName(t(language, "settings.exclusions.name"))
-      .setDesc(t(language, "settings.exclusions.desc"))
-      .addTextArea((text) =>
-        text
-          .setValue(this.plugin.settings.exclusions)
-          .onChange(async (value) => {
-            this.plugin.settings.exclusions = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
+    if (this.activeTab === "sync") {
     new Setting(containerEl)
       .setName(t(language, "settings.manual.name"))
       .setDesc(t(language, "settings.manual.desc", { time: this.plugin.settings.lastSync || t(language, "settings.manual.never") }))
@@ -1073,7 +1090,9 @@ class SyncSettingTab extends PluginSettingTab {
           this.display();
         })
       );
+    }
 
+    if (this.activeTab === "hermes") {
     new Setting(containerEl)
       .setName(t(language, "settings.telegram.import.name"))
       .setDesc(t(language, "settings.telegram.import.desc", { count: this.plugin.telegramQueueItems.length }))
@@ -1099,7 +1118,9 @@ class SyncSettingTab extends PluginSettingTab {
         .setName(`${item.created_at} - ${item.target_note_path || "Inbox/Telegram.md"}`)
         .setDesc(previewText(item.merge_content || ""));
     }
+    }
 
+    if (this.activeTab === "status") {
     const stats = this.plugin.settings.lastSyncStats;
     const status = t(language, `settings.status.${this.plugin.settings.lastSyncStatus}`);
     new Setting(containerEl)
@@ -1167,7 +1188,9 @@ class SyncSettingTab extends PluginSettingTab {
           })
         );
     }
+    }
 
+    if (this.activeTab === "devices") {
     const deviceTotal = this.plugin.devices.length;
     const revokedDevices = this.plugin.devices.filter((device) => !!device.revoked_at).length;
     const activeDevices = this.plugin.devices.filter((device) => !device.revoked_at).length;
@@ -1209,7 +1232,9 @@ class SyncSettingTab extends PluginSettingTab {
           });
         });
     }
+    }
 
+    if (this.activeTab === "status") {
     const history = this.plugin.settings.syncHistory ?? [];
     new Setting(containerEl)
       .setName(t(language, "settings.history.name"))
@@ -1226,6 +1251,31 @@ class SyncSettingTab extends PluginSettingTab {
           conflicts: entry.conflicts
         }));
     }
+    }
+  }
+
+  private renderTabNav(containerEl: HTMLElement, language: Language): void {
+    const navEl = containerEl.createDiv({ cls: "zk-sync-settings-tabs" });
+    const tabs: Array<[SettingsTabId, string]> = [
+      ["account", "settings.tabs.account"],
+      ["sync", "settings.tabs.sync"],
+      ["files", "settings.tabs.files"],
+      ["attachments", "settings.tabs.attachments"],
+      ["hermes", "settings.tabs.hermes"],
+      ["status", "settings.tabs.status"],
+      ["devices", "settings.tabs.devices"]
+    ];
+    for (const [id, labelKey] of tabs) {
+      const button = navEl.createEl("button", {
+        cls: `zk-sync-settings-tab${this.activeTab === id ? " is-active" : ""}`,
+        text: t(language, labelKey)
+      });
+      button.type = "button";
+      button.onclick = () => {
+        this.activeTab = id;
+        this.display();
+      };
+    }
   }
 
   private async register(): Promise<void> {
@@ -1241,7 +1291,7 @@ class SyncSettingTab extends PluginSettingTab {
     });
   }
 
-  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles">): void {
+  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncJson" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles">): void {
     const language = this.plugin.settings.language;
     new Setting(containerEl)
       .setName(t(language, labelKey))

@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   ].join("\n"),
   hermesAgentAppendScoreThreshold: 6,
   syncMarkdown: true,
+  syncJson: true,
   syncImages: true,
   syncDocuments: true,
   syncAudio: true,
