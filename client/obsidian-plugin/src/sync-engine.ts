@@ -1,5 +1,5 @@
 import { Notice, TFile, Vault } from "obsidian";
-import { CONFLICT_DIR } from "./defaults";
+import { CONFLICT_DIR, PROTECTED_EXCLUSIONS } from "./defaults";
 import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
@@ -8,6 +8,14 @@ import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
 const MAX_SYNC_HISTORY = 20;
+
+interface LocalSyncFile {
+  path: string;
+  extension: string;
+  size: number;
+  mtime: number;
+  file?: TFile;
+}
 
 export class SyncEngine {
   private running = false;
@@ -104,6 +112,16 @@ export class SyncEngine {
       return;
     }
     await this.ensureParentFolder(decrypted.path);
+    if (this.isDotObsidianPath(decrypted.path)) {
+      await this.vault.adapter.writeBinary(decrypted.path, decrypted.content.buffer as ArrayBuffer);
+      const stat = await this.vault.adapter.stat(decrypted.path);
+      state.notes[decrypted.path] = {
+        pathHash: change.path_hash,
+        versionVector: change.version_vector,
+        modifiedTime: stat?.mtime ?? Date.now()
+      };
+      return;
+    }
     const created = await this.vault.createBinary(decrypted.path, decrypted.content.buffer as ArrayBuffer);
     state.notes[decrypted.path] = {
       pathHash: change.path_hash,
@@ -123,20 +141,22 @@ export class SyncEngine {
     const existing = this.vault.getAbstractFileByPath(path);
     if (existing && "extension" in existing) {
       await this.vault.delete(existing);
+    } else if (await this.vault.adapter.exists(path)) {
+      await this.vault.adapter.remove(path);
     }
     delete state.notes[path];
   }
 
   private async pushLocalChanges(state: SyncState): Promise<void> {
     const changes: PushChange[] = [];
-    const files = this.vault.getFiles().filter((file) => !this.isExcluded(file.path) && isFileTypeSyncEnabled(file.extension, this.settings));
+    const files = await this.listLocalSyncFiles();
 
     for (const file of files) {
       const tracked = state.notes[file.path];
-      if (tracked && tracked.modifiedTime >= file.stat.mtime) {
+      if (tracked && tracked.modifiedTime >= file.mtime) {
         continue;
       }
-      const content = new Uint8Array(await this.vault.readBinary(file));
+      const content = new Uint8Array(file.file ? await this.vault.readBinary(file.file) : await this.vault.adapter.readBinary(file.path));
       const encrypted = await this.crypto.encryptFile(file.path, content);
       const versionVector = { ...(tracked?.versionVector ?? {}) };
       versionVector[this.settings.deviceId] = (versionVector[this.settings.deviceId] ?? 0) + 1;
@@ -147,13 +167,13 @@ export class SyncEngine {
         encrypted_dek: encrypted.encryptedDek,
         version_vector: versionVector,
         operation: tracked ? "update" : "create",
-        file_size: file.stat.size,
+        file_size: file.size,
         mime_type: mimeTypeForPath(file.path)
       });
       state.notes[file.path] = {
         pathHash: encrypted.pathHash,
         versionVector,
-        modifiedTime: file.stat.mtime
+        modifiedTime: file.mtime
       };
     }
 
@@ -164,7 +184,7 @@ export class SyncEngine {
       if (!isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
         continue;
       }
-      if (this.vault.getAbstractFileByPath(path)) {
+      if (this.vault.getAbstractFileByPath(path) || await this.vault.adapter.exists(path)) {
         continue;
       }
       const tracked = state.notes[path];
@@ -209,7 +229,7 @@ export class SyncEngine {
   }
 
   private isExcluded(path: string): boolean {
-    const patterns = this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const patterns = [...PROTECTED_EXCLUSIONS, ...this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
     return patterns.some((pattern) => {
       if (pattern.endsWith("/**")) {
         return path.startsWith(pattern.slice(0, -3));
@@ -224,10 +244,55 @@ export class SyncEngine {
     let current = "";
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
-      if (!this.vault.getAbstractFileByPath(current)) {
+      if (this.isDotObsidianPath(current) || current === ".obsidian") {
+        if (!(await this.vault.adapter.exists(current))) {
+          await this.vault.adapter.mkdir(current);
+        }
+      } else if (!this.vault.getAbstractFileByPath(current)) {
         await this.vault.createFolder(current);
       }
     }
+  }
+
+  private async listLocalSyncFiles(): Promise<LocalSyncFile[]> {
+    const files = new Map<string, LocalSyncFile>();
+    for (const file of this.vault.getFiles()) {
+      if (!this.isExcluded(file.path) && isFileTypeSyncEnabled(file.extension, this.settings)) {
+        files.set(file.path, {
+          path: file.path,
+          extension: file.extension,
+          size: file.stat.size,
+          mtime: file.stat.mtime,
+          file
+        });
+      }
+    }
+    for (const path of await this.listAdapterFiles(".obsidian")) {
+      if (files.has(path) || this.isExcluded(path) || !isFileTypeSyncEnabled(extensionForPath(path), this.settings)) {
+        continue;
+      }
+      const stat = await this.vault.adapter.stat(path);
+      files.set(path, {
+        path,
+        extension: extensionForPath(path),
+        size: stat?.size ?? 0,
+        mtime: stat?.mtime ?? 0
+      });
+    }
+    return [...files.values()];
+  }
+
+  private async listAdapterFiles(folder: string): Promise<string[]> {
+    if (!(await this.vault.adapter.exists(folder))) {
+      return [];
+    }
+    const listed = await this.vault.adapter.list(folder);
+    const nested = await Promise.all(listed.folders.map((child) => this.listAdapterFiles(child)));
+    return [...listed.files, ...nested.flat()];
+  }
+
+  private isDotObsidianPath(path: string): boolean {
+    return path === ".obsidian" || path.startsWith(".obsidian/");
   }
 
   private recordSyncHistory(status: SyncStatus): void {

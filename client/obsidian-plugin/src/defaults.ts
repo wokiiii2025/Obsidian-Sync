@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   lastAttachmentCleanupAt: "",
   orphanAttachments: [],
   conflictMode: "auto",
-  exclusions: ".obsidian/**\n.obsidian-syncignore",
+  exclusions: ".obsidian/plugins/obsidian-zero-knowledge-sync/data.json\n.obsidian/zero-knowledge-sync-state.json\n.obsidian-syncignore",
   lastSync: "",
   lastSyncStatus: "idle",
   lastSyncStats: {
@@ -70,3 +70,8 @@ export const DEFAULT_STATE: SyncState = {
 
 export const STATE_FILE = ".obsidian/zero-knowledge-sync-state.json";
 export const CONFLICT_DIR = ".obsidian-conflicts";
+export const LEGACY_DEFAULT_EXCLUSIONS = ".obsidian/**\n.obsidian-syncignore";
+export const PROTECTED_EXCLUSIONS = [
+  ".obsidian/plugins/obsidian-zero-knowledge-sync/data.json",
+  STATE_FILE
+];

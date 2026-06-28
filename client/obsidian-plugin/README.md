@@ -14,6 +14,7 @@ This is the client-side plugin for the sync server in `../../server`.
 - Tracked conflict copies with open/restore actions.
 - Device list and revoke-device support.
 - File-type selective sync.
+- Obsidian configuration and plugin file sync from `.obsidian`.
 - English and Chinese settings UI.
 - Optional managed attachment folder with automatic note link rewriting.
 - Custom attachment type folder mappings.
@@ -133,7 +134,9 @@ Cleanup requires a second confirmation and moves orphan attachments to the syste
 - Current file versions: open a file, click **Load versions**, then restore a selected encrypted version.
 - Conflict copies: open or restore tracked conflict copies created by sync conflicts.
 - Devices: refresh registered devices and revoke non-current devices.
-- Selective sync: enable or disable Markdown, images, documents, audio, video, archives, and other files.
+- Selective sync: enable or disable Markdown, JSON data files, images, documents, audio, video, archives, and other files.
+- Obsidian configuration sync: `.obsidian` files are supported so themes, snippets, plugins, hotkeys, and related JSON configuration can follow the vault across devices.
+- Protected local files: `.obsidian/plugins/obsidian-zero-knowledge-sync/data.json` and `.obsidian/zero-knowledge-sync-state.json` are always excluded because they contain device-local login/sync state.
 
 ## Notes
 

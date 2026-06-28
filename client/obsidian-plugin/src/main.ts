@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
-import { CONFLICT_DIR, DEFAULT_SETTINGS } from "./defaults";
+import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
 import { isFileTypeSyncEnabled, isManagedAttachmentExtension } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
@@ -117,6 +117,10 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    if (this.settings.exclusions === LEGACY_DEFAULT_EXCLUSIONS) {
+      this.settings.exclusions = DEFAULT_SETTINGS.exclusions;
+      await this.saveData(this.settings);
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -645,7 +649,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   private isExcludedPath(path: string): boolean {
-    const patterns = this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const patterns = [...PROTECTED_EXCLUSIONS, ...this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
     return patterns.some((pattern) => {
       if (pattern.endsWith("/**")) {
         return path.startsWith(pattern.slice(0, -3));
