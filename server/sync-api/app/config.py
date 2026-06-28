@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     hermes_agent_create_folder: str = "Inbox/Hermes"
     hermes_agent_inbox_path: str = "Inbox/Telegram.md"
     hermes_agent_append_score_threshold: int = 6
+    hermes_agent_exclusions: str = "90-密钥凭证/**\n.obsidian/**\n.obsidian-conflicts/**"
     hermes_agent_routing_rules: str = "\n".join(
         [
             "ai, openai, chatgpt, llm, agent, 人工智能, 大模型, 智能体 => AI",

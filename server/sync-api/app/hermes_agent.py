@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Iterable
 
+import httpx
 from argon2.low_level import Type, hash_secret_raw
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
@@ -106,6 +107,7 @@ async def process_pending_hermes_items(settings: Settings, session: AsyncSession
                 item.merged_at = datetime.now(UTC)
                 processed += 1
                 continue
+            content = await enrich_hermes_content(content)
             index = await build_vault_index(session, vault_id, kek)
             decision = route_item(settings, item, content, index)
             await apply_decision(session, vault_id, device.id, kek, decision)
@@ -137,9 +139,12 @@ async def hermes_device(session: AsyncSession, vault_id: uuid.UUID) -> Device:
 async def build_vault_index(session: AsyncSession, vault_id: uuid.UUID, kek: bytes) -> list[HermesNoteIndex]:
     query = select(Note).where(Note.vault_id == vault_id, Note.deleted_at.is_(None), Note.mime_type == "text/markdown")
     notes = (await session.execute(query)).scalars().all()
+    settings = Settings()
     index: list[HermesNoteIndex] = []
     for note in notes:
         path, content = decrypt_note(kek, note)
+        if is_excluded_path(path, settings.hermes_agent_exclusions):
+            continue
         index.append(
             HermesNoteIndex(
                 path=path,
@@ -160,6 +165,30 @@ def route_item(settings: Settings, item: HermesQueue, content: str, index: list[
     candidates = score_candidates(content, index, rule.keywords if rule else [])
     best = candidates[0] if candidates else None
     threshold = max(1, settings.hermes_agent_append_score_threshold)
+    project_title = github_project_title(content)
+    if project_title:
+        title_lower = project_title.lower()
+        if best and (title_lower in best[1].path.lower() or title_lower in best[1].title.lower()):
+            note = best[1]
+            return HermesRouteDecision(
+                action="append_existing",
+                target_path=note.path,
+                title=note.title,
+                heading=best[2] or "Hermes",
+                content=content,
+                reason=f"Matched existing project note with score {best[0]}.",
+                existing_note=note.note,
+                existing_content=note.content,
+            )
+        target_folder = project_target_folder(settings, rule, best)
+        return HermesRouteDecision(
+            action="create_new",
+            target_path=unique_markdown_path(f"{target_folder}/{project_title}.md", [entry.path for entry in index]),
+            title=project_title,
+            heading="Hermes",
+            content=content,
+            reason=f"GitHub project captured from {rule.target_folder} route." if rule else "GitHub project captured.",
+        )
     if best and best[0] >= threshold:
         note = best[1]
         return HermesRouteDecision(
@@ -283,6 +312,148 @@ def decrypt_bytes(key: bytes, payload: bytes, aad: bytes | None = None) -> bytes
     nonce = payload[:NONCE_LENGTH]
     ciphertext = payload[NONCE_LENGTH:]
     return AESGCM(key).decrypt(nonce, ciphertext, aad)
+
+
+async def enrich_hermes_content(content: str) -> str:
+    github_repo = github_repo_from_text(content)
+    if github_repo:
+        return await enrich_github_repository(content, github_repo[0], github_repo[1])
+    return content
+
+
+def github_repo_from_text(content: str) -> tuple[str, str] | None:
+    match = re.search(r"https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:[/?#\s]|$)", content)
+    if not match:
+        return None
+    return match.group(1), match.group(2).removesuffix(".git")
+
+
+def github_project_title(content: str) -> str:
+    match = re.search(r"^### GitHub 项目分析：(.+)$", content, re.MULTILINE)
+    if not match:
+        return ""
+    return sanitize_filename(match.group(1).strip())
+
+
+def project_target_folder(settings: Settings, rule: HermesRoutingRule | None, best: tuple[int, HermesNoteIndex, str] | None) -> str:
+    if best and best[0] >= 3 and not is_excluded_path(best[1].path, settings.hermes_agent_exclusions):
+        parent = parent_folder(best[1].path)
+        if parent:
+            return parent
+    if rule and rule.target_folder:
+        return rule.target_folder
+    return normalize_path(settings.hermes_agent_create_folder)
+
+
+async def enrich_github_repository(content: str, owner: str, repo: str) -> str:
+    repo_url = f"https://github.com/{owner}/{repo}"
+    api_url = f"https://api.github.com/repos/{owner}/{repo}"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "Obsidian-Hermes-Agent"}
+    try:
+        async with httpx.AsyncClient(timeout=15, headers=headers, follow_redirects=True) as client:
+            repo_response = await client.get(api_url)
+            repo_response.raise_for_status()
+            repo_data = repo_response.json()
+            readme_excerpt = await fetch_github_readme_excerpt(client, owner, repo, repo_data.get("default_branch") or "main")
+    except Exception as exc:
+        logger.warning("GitHub enrichment failed for %s/%s: %s", owner, repo, exc)
+        return content
+
+    description = repo_data.get("description") or "未提供描述"
+    language = repo_data.get("language") or "未知"
+    stars = repo_data.get("stargazers_count") or 0
+    forks = repo_data.get("forks_count") or 0
+    updated_at = repo_data.get("updated_at") or "未知"
+    homepage = repo_data.get("homepage") or ""
+    topics = repo_data.get("topics") or []
+    archived = "是" if repo_data.get("archived") else "否"
+    license_name = (repo_data.get("license") or {}).get("name") or "未声明"
+    analysis = github_usefulness_note(description, readme_excerpt, topics, language)
+    lines = [
+        f"### GitHub 项目分析：{repo}",
+        "",
+        f"- 仓库：[{owner}/{repo}]({repo_url})",
+        f"- 定位：{description}",
+        f"- 主要语言：{language}",
+        f"- Stars/Forks：{stars} / {forks}",
+        f"- 最近更新：{updated_at}",
+        f"- License：{license_name}",
+        f"- Archived：{archived}",
+    ]
+    if topics:
+        lines.append(f"- Topics：{', '.join(str(topic) for topic in topics[:12])}")
+    if homepage:
+        lines.append(f"- Homepage：{homepage}")
+    lines.extend(
+        [
+            "",
+            "#### 初步判断",
+            "",
+            analysis,
+        ]
+    )
+    if readme_excerpt:
+        lines.extend(
+            [
+                "",
+                "#### README 摘要",
+                "",
+                readme_excerpt,
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "#### 原始采集",
+            "",
+            content.strip(),
+        ]
+    )
+    return "\n".join(lines).strip()
+
+
+async def fetch_github_readme_excerpt(client: httpx.AsyncClient, owner: str, repo: str, default_branch: str) -> str:
+    candidates = [
+        f"https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/README.md",
+        f"https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/readme.md",
+        f"https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/README.rst",
+    ]
+    for url in candidates:
+        response = await client.get(url)
+        if response.status_code == 200 and response.text.strip():
+            return compact_markdown_excerpt(response.text, 1200)
+    return ""
+
+
+def compact_markdown_excerpt(markdown: str, limit: int) -> str:
+    lines = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("!", "[![", "<p", "</p>", "<img", "<picture", "<source")):
+            continue
+        lines.append(stripped)
+        if sum(len(item) for item in lines) > limit:
+            break
+    excerpt = "\n".join(lines)
+    return excerpt[:limit].rstrip()
+
+
+def github_usefulness_note(description: str, readme_excerpt: str, topics: list[str], language: str) -> str:
+    text = f"{description}\n{readme_excerpt}\n{' '.join(topics)}".lower()
+    points: list[str] = []
+    if any(keyword in text for keyword in ["stock", "price", "trading", "finance", "投资", "股票", "价格"]):
+        points.append("这是一个偏金融/价格分析方向的项目，适合归入投资、量化或数据分析资料。")
+    if any(keyword in text for keyword in ["ai", "agent", "llm", "machine learning", "deep learning", "人工智能", "模型"]):
+        points.append("项目包含 AI/模型相关信号，后续可以关注其模型输入、数据来源和预测流程。")
+    if any(keyword in text for keyword in ["api", "server", "backend", "fastapi", "web"]):
+        points.append("它可能包含可部署服务或 API，适合进一步检查运行方式和接口设计。")
+    if language and language != "未知":
+        points.append(f"主要语言是 {language}，可优先查看依赖文件、入口文件和 README 的运行说明。")
+    if not points:
+        points.append("当前只能从仓库元数据做初步判断，建议继续查看 README、示例和最近提交来确认可用性。")
+    return "\n".join(f"- {point}" for point in points)
 
 
 def parse_routing_rules(text: str) -> list[HermesRoutingRule]:
@@ -460,3 +631,14 @@ def normalize_path(path: str) -> str:
 def parent_folder(path: str) -> str:
     normalized = normalize_path(path)
     return normalized.rsplit("/", 1)[0] if "/" in normalized else ""
+
+
+def is_excluded_path(path: str, patterns_text: str) -> bool:
+    patterns = [normalize_path(line.strip()) for line in patterns_text.splitlines() if line.strip()]
+    normalized = normalize_path(path)
+    for pattern in patterns:
+        if pattern.endswith("/**") and normalized.startswith(pattern[:-3]):
+            return True
+        if normalized == pattern or normalized.startswith(f"{pattern}/"):
+            return True
+    return False
