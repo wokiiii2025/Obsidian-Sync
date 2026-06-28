@@ -39,6 +39,11 @@ export interface PluginSettings {
   hermesAgentCreateFolder: string;
   hermesAgentRoutingRules: string;
   hermesAgentAppendScoreThreshold: number;
+  updateCheckEnabled: boolean;
+  updateRepository: string;
+  updateBranch: string;
+  lastUpdateCheckAt: string;
+  availableVersion: string;
   syncMarkdown: boolean;
   syncJson: boolean;
   syncImages: boolean;

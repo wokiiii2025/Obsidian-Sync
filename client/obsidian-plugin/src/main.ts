@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, setIcon } from "obsidian";
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, requestUrl, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
 import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
@@ -6,6 +6,12 @@ import { isFileTypeSyncEnabled, isManagedAttachmentExtension } from "./file-poli
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
 import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
+
+interface RemotePluginManifest {
+  id: string;
+  name: string;
+  version: string;
+}
 
 export default class ZeroKnowledgeSyncPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -25,6 +31,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   activeFileVersions: NoteVersionInfo[] = [];
   devices: DeviceInfo[] = [];
   telegramQueueItems: HermesQueueItem[] = [];
+  latestUpdateManifest: RemotePluginManifest | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -92,6 +99,14 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
         this.importTelegramQueue().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
       }
     });
+    this.addCommand({
+      id: "zero-knowledge-sync-check-update",
+      name: t(this.settings.language, "settings.updates.check.name"),
+      callback: () => {
+        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.updates.check.button") }));
+        this.checkForPluginUpdate().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }
+    });
     this.registerFileWatchers();
     this.configureInterval();
     this.configureHermesAgent();
@@ -99,6 +114,12 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       this.promptInitialAttachmentOrganization().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
     }, 1500);
     this.register(() => window.clearTimeout(initialAttachmentTimer));
+    if (this.settings.updateCheckEnabled) {
+      const updateTimer = window.setTimeout(() => {
+        this.checkForPluginUpdate(true).catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
+      }, 5000);
+      this.register(() => window.clearTimeout(updateTimer));
+    }
   }
 
   onunload(): void {
@@ -366,6 +387,40 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     await this.syncNow();
   }
 
+  async checkForPluginUpdate(silent = false): Promise<RemotePluginManifest> {
+    const manifest = await this.fetchRemotePluginManifest();
+    this.latestUpdateManifest = manifest;
+    this.settings.availableVersion = isNewerVersion(manifest.version, this.manifest.version) ? manifest.version : "";
+    this.settings.lastUpdateCheckAt = new Date().toISOString();
+    await this.saveSettings();
+    if (!silent) {
+      new Notice(t(this.settings.language, this.settings.availableVersion ? "notice.updateAvailable" : "notice.updateCurrent", { version: manifest.version }));
+    } else if (this.settings.availableVersion) {
+      new Notice(t(this.settings.language, "notice.updateAvailable", { version: manifest.version }));
+    }
+    return manifest;
+  }
+
+  async installPluginUpdate(): Promise<void> {
+    const manifest = this.latestUpdateManifest ?? await this.checkForPluginUpdate(true);
+    if (!isNewerVersion(manifest.version, this.manifest.version)) {
+      new Notice(t(this.settings.language, "notice.updateCurrent", { version: manifest.version }));
+      return;
+    }
+    const baseUrl = this.pluginRawBaseUrl();
+    for (const file of ["main.js", "manifest.json", "styles.css"]) {
+      const response = await requestUrl({ url: `${baseUrl}/${file}`, method: "GET" });
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`Update download failed: ${file}`);
+      }
+      await this.app.vault.adapter.write(`.obsidian/plugins/${this.manifest.id}/${file}`, response.text);
+    }
+    this.settings.availableVersion = "";
+    this.settings.lastUpdateCheckAt = new Date().toISOString();
+    await this.saveSettings();
+    new Notice(t(this.settings.language, "notice.updateInstalled", { version: manifest.version }));
+  }
+
   async syncNow(): Promise<void> {
     if (this.syncPromise) {
       return this.syncPromise;
@@ -384,6 +439,20 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
         }
       });
     return this.syncPromise;
+  }
+
+  private async fetchRemotePluginManifest(): Promise<RemotePluginManifest> {
+    const response = await requestUrl({ url: `${this.pluginRawBaseUrl()}/manifest.json`, method: "GET" });
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Update check failed: HTTP ${response.status}`);
+    }
+    return JSON.parse(response.text) as RemotePluginManifest;
+  }
+
+  private pluginRawBaseUrl(): string {
+    const repository = normalizeRepository(this.settings.updateRepository || DEFAULT_SETTINGS.updateRepository);
+    const branch = encodeURIComponent(this.settings.updateBranch || DEFAULT_SETTINGS.updateBranch);
+    return `https://raw.githubusercontent.com/${repository}/${branch}/client/obsidian-plugin`;
   }
 
   private configureInterval(): void {
@@ -700,7 +769,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 }
 
-type SettingsTabId = "account" | "sync" | "files" | "attachments" | "hermes" | "status" | "devices";
+type SettingsTabId = "account" | "sync" | "files" | "attachments" | "hermes" | "updates" | "status" | "devices";
 
 class SyncSettingTab extends PluginSettingTab {
   private password = "";
@@ -926,6 +995,71 @@ class SyncSettingTab extends PluginSettingTab {
             this.plugin.settings.hermesAgentRoutingRules = value;
             await this.plugin.saveSettings();
           })
+      );
+    }
+
+    if (this.activeTab === "updates") {
+    new Setting(containerEl)
+      .setName(t(language, "settings.updates.current"))
+      .setDesc(t(language, "settings.updates.currentDesc", {
+        current: this.plugin.manifest.version,
+        latest: this.plugin.settings.availableVersion || t(language, "settings.updates.none")
+      }));
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.updates.auto.name"))
+      .setDesc(t(language, "settings.updates.auto.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.updateCheckEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.updateCheckEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.updates.repository.name"))
+      .setDesc(t(language, "settings.updates.repository.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.updateRepository)
+          .setValue(this.plugin.settings.updateRepository)
+          .onChange(async (value) => {
+            this.plugin.settings.updateRepository = normalizeRepository(value || DEFAULT_SETTINGS.updateRepository);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.updates.branch.name"))
+      .setDesc(t(language, "settings.updates.branch.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.updateBranch)
+          .setValue(this.plugin.settings.updateBranch)
+          .onChange(async (value) => {
+            this.plugin.settings.updateBranch = value.trim() || DEFAULT_SETTINGS.updateBranch;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.updates.check.name"))
+      .setDesc(t(language, "settings.updates.check.desc", {
+        time: this.plugin.settings.lastUpdateCheckAt || t(language, "settings.stats.none")
+      }))
+      .addButton((button) =>
+        this.bindActionButton(button.setButtonText(t(language, "settings.updates.check.button")), t(language, "settings.updates.check.button"), async () => {
+          await this.plugin.checkForPluginUpdate();
+          this.display();
+        })
+      )
+      .addButton((button) =>
+        this.bindActionButton(button.setButtonText(t(language, "settings.updates.install.button")).setCta(), t(language, "settings.updates.install.button"), async () => {
+          await this.plugin.installPluginUpdate();
+          this.display();
+        })
       );
     }
 
@@ -1267,6 +1401,7 @@ class SyncSettingTab extends PluginSettingTab {
       ["files", "settings.tabs.files"],
       ["attachments", "settings.tabs.attachments"],
       ["hermes", "settings.tabs.hermes"],
+      ["updates", "settings.tabs.updates"],
       ["status", "settings.tabs.status"],
       ["devices", "settings.tabs.devices"]
     ];
@@ -1754,4 +1889,30 @@ function formatAttachmentDate(format: string, date: Date): string {
 
 function normalizeDateFormat(format: string): string {
   return normalizePath(format || DEFAULT_SETTINGS.attachmentDateFormat);
+}
+
+function normalizeRepository(value: string): string {
+  return value.trim()
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/^\/+|\/+$/g, "");
+}
+
+function isNewerVersion(remote: string, current: string): boolean {
+  const left = versionParts(remote);
+  const right = versionParts(current);
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = left[index] ?? 0;
+    const b = right[index] ?? 0;
+    if (a !== b) {
+      return a > b;
+    }
+  }
+  return false;
+}
+
+function versionParts(version: string): number[] {
+  return version.split(/[.-]/)
+    .map((part) => Number.parseInt(part, 10))
+    .map((part) => Number.isFinite(part) ? part : 0);
 }

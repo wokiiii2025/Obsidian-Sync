@@ -23,6 +23,11 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     "read, book, article, paper, 阅读, 文章, 论文, 资料 => 阅读"
   ].join("\n"),
   hermesAgentAppendScoreThreshold: 6,
+  updateCheckEnabled: true,
+  updateRepository: "wokiiii2025/Obsidian-Sync",
+  updateBranch: "main",
+  lastUpdateCheckAt: "",
+  availableVersion: "",
   syncMarkdown: true,
   syncJson: true,
   syncImages: true,

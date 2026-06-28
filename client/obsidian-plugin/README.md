@@ -15,6 +15,7 @@ This is the client-side plugin for the sync server in `../../server`.
 - Device list and revoke-device support.
 - File-type selective sync.
 - Obsidian configuration and plugin file sync from `.obsidian`.
+- GitHub version check and one-click plugin file update.
 - English and Chinese settings UI.
 - Optional managed attachment folder with automatic note link rewriting.
 - Custom attachment type folder mappings.
@@ -137,6 +138,18 @@ Cleanup requires a second confirmation and moves orphan attachments to the syste
 - Selective sync: enable or disable Markdown, JSON data files, images, documents, audio, video, archives, and other files.
 - Obsidian configuration sync: `.obsidian` files are supported so themes, snippets, plugins, hotkeys, and related JSON configuration can follow the vault across devices.
 - Protected local files: `.obsidian/plugins/obsidian-zero-knowledge-sync/data.json` and `.obsidian/zero-knowledge-sync-state.json` are always excluded because they contain device-local login/sync state.
+
+## Plugin Updates
+
+The settings page includes an **Updates** tab. It checks the configured GitHub repository's `client/obsidian-plugin/manifest.json` and compares the remote version with the currently loaded plugin version.
+
+When an update is installed, the plugin downloads and replaces:
+
+- `main.js`
+- `manifest.json`
+- `styles.css`
+
+Reload Obsidian after installing an update. The updater does not run `git pull`; it works through GitHub raw file downloads so it can run inside the Obsidian plugin sandbox.
 
 ## Notes
 
