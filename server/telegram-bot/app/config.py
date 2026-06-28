@@ -21,6 +21,9 @@ class Settings:
     telegram_allowed_chat_ids: set[str]
     telegram_reply_on_queue: bool
     telegram_delete_after_queue: bool
+    telegram_polling_enabled: bool
+    telegram_polling_interval_seconds: int
+    telegram_skip_pending_on_start: bool
     sync_api_url: str
     hermes_api_key: str
     vault_id: str
@@ -35,6 +38,9 @@ def get_settings() -> Settings:
         telegram_allowed_chat_ids=_csv_env("TELEGRAM_ALLOWED_CHAT_IDS"),
         telegram_reply_on_queue=_bool_env("TELEGRAM_REPLY_ON_QUEUE", True),
         telegram_delete_after_queue=_bool_env("TELEGRAM_DELETE_AFTER_QUEUE", False),
+        telegram_polling_enabled=_bool_env("TELEGRAM_POLLING_ENABLED", False),
+        telegram_polling_interval_seconds=int(os.getenv("TELEGRAM_POLLING_INTERVAL_SECONDS", "2")),
+        telegram_skip_pending_on_start=_bool_env("TELEGRAM_SKIP_PENDING_ON_START", True),
         sync_api_url=os.getenv("SYNC_API_URL", "http://sync-api:8000").rstrip("/"),
         hermes_api_key=os.getenv("HERMES_API_KEY", ""),
         vault_id=os.getenv("TELEGRAM_VAULT_ID", ""),

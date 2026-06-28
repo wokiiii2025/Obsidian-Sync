@@ -61,7 +61,11 @@ TELEGRAM_ALLOWED_CHAT_IDS=-1001234567890,-1009876543210
 TELEGRAM_TARGET_NOTE_PATH=Inbox/Telegram.md
 TELEGRAM_REPLY_ON_QUEUE=true
 TELEGRAM_DELETE_AFTER_QUEUE=false
+TELEGRAM_POLLING_ENABLED=true
+TELEGRAM_SKIP_PENDING_ON_START=true
 ```
+
+Recommended first-run mode is polling. It does not require an HTTPS domain; the server actively pulls updates from Telegram.
 
 Webhook endpoint:
 
@@ -76,6 +80,8 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -d "url=https://<domain>/telegram/webhook/$TELEGRAM_WEBHOOK_SECRET" \
   -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
 ```
+
+If polling is enabled, the service deletes any existing webhook on startup and reads new updates with `getUpdates`.
 
 Current behavior:
 
