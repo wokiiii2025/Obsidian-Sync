@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   manageAttachments: true,
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",
-  attachmentDateFormat: "YYYY/MM/DD",
+  attachmentDateFormat: "YYYY-MM-DD",
   attachmentTypeMappings: [
     "images: png, jpg, jpeg, gif, webp, svg, bmp, avif",
     "documents: pdf, doc, docx, ppt, pptx, xls, xlsx, csv",
@@ -77,6 +77,7 @@ export const DEFAULT_STATE: SyncState = {
 export const STATE_FILE = ".obsidian/zero-knowledge-sync-state.json";
 export const CONFLICT_DIR = ".obsidian-conflicts";
 export const LEGACY_DEFAULT_EXCLUSIONS = ".obsidian/**\n.obsidian-syncignore";
+export const LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT = "YYYY/MM/DD";
 export const PROTECTED_EXCLUSIONS = [
   ".obsidian/plugins/obsidian-zero-knowledge-sync/data.json",
   STATE_FILE

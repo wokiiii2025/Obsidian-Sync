@@ -56,7 +56,7 @@ Required files:
 
 The plugin can manage attachment locations automatically. When enabled, non-Markdown files are moved into the configured attachment folder and note references are rewritten.
 
-On first use, if unmanaged attachments already exist in the vault, the plugin shows a confirmation prompt before moving anything. You can also run the same action later from the settings page with **Organize existing attachments**.
+On first use, if unmanaged attachments already exist in the vault, the plugin shows a confirmation prompt before moving anything. You can also run the same action later from the settings page with **Organize existing attachments**. The same action also migrates old managed attachment layouts, for example from `Attachments/images/2026/06/24/photo.png` to `Attachments/images/2026-06-24/photo.png`.
 
 Supported reference styles:
 
@@ -90,8 +90,8 @@ Date format examples:
 
 | Date format | Result segment |
 |---|---|
-| `YYYY/MM/DD` | `2026/06/24` |
 | `YYYY-MM-DD` | `2026-06-24` |
+| `YYYY/MM/DD` | `2026/06/24` |
 | `YYYY_MM_DD` | `2026_06_24` |
 | `YYYY/MM` | `2026/06` |
 

@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, requestUrl, setIcon } from "obsidian";
 import { SyncApi } from "./api";
 import { CryptoService } from "./crypto";
-import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
+import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
 import { isManagedAttachmentExtension, isPathSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
 import { SyncEngine } from "./sync-engine";
@@ -143,6 +143,10 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       this.settings.exclusions = DEFAULT_SETTINGS.exclusions;
       await this.saveData(this.settings);
     }
+    if (this.settings.attachmentDateFormat === LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT) {
+      this.settings.attachmentDateFormat = DEFAULT_SETTINGS.attachmentDateFormat;
+      await this.saveData(this.settings);
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -187,14 +191,13 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   async organizeExistingAttachments(): Promise<number> {
-    const files = this.unmanagedAttachmentFiles();
+    const files = this.attachmentFilesNeedingOrganization();
     let organized = 0;
     this.bulkAttachmentOrganizing = true;
     try {
       for (const file of files) {
         const current = this.app.vault.getAbstractFileByPath(file.path);
-        if (current instanceof TFile && current.extension !== "md") {
-          await this.organizeAttachment(current);
+        if (current instanceof TFile && await this.organizeAttachment(current)) {
           organized += 1;
         }
       }
@@ -244,7 +247,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   countUnmanagedAttachments(): number {
-    return this.unmanagedAttachmentFiles().length;
+    return this.attachmentFilesNeedingOrganization().length;
   }
 
   async loadActiveFileVersions(): Promise<NoteVersionInfo[]> {
@@ -540,10 +543,14 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   private async promptInitialAttachmentOrganization(): Promise<void> {
-    if (!this.settings.manageAttachments || this.settings.attachmentMigrationPrompted) {
+    if (!this.settings.manageAttachments) {
       return;
     }
-    const files = this.unmanagedAttachmentFiles();
+    const files = this.attachmentFilesNeedingOrganization();
+    const hasOutdatedManagedLayout = files.some((file) => this.isInAttachmentFolder(file.path));
+    if (this.settings.attachmentMigrationPrompted && !hasOutdatedManagedLayout) {
+      return;
+    }
     if (files.length === 0) {
       this.settings.attachmentMigrationPrompted = true;
       await this.saveSettings();
@@ -565,19 +572,19 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     ).open();
   }
 
-  private unmanagedAttachmentFiles(): TFile[] {
+  private attachmentFilesNeedingOrganization(): TFile[] {
     return this.app.vault.getFiles()
       .filter((file) => isManagedAttachmentExtension(file.extension))
       .filter((file) => !this.isExcludedPath(file.path))
-      .filter((file) => !this.isInAttachmentFolder(file.path));
+      .filter((file) => !this.isAttachmentInTargetLocation(file));
   }
 
-  private async organizeAttachment(file: TAbstractFile, oldPath?: string): Promise<void> {
+  private async organizeAttachment(file: TAbstractFile, oldPath?: string): Promise<boolean> {
     if (!this.settings.manageAttachments || !(file instanceof TFile) || !isManagedAttachmentExtension(file.extension)) {
-      return;
+      return false;
     }
-    if (this.organizingAttachmentPaths.has(file.path) || this.isExcludedPath(file.path) || this.isInAttachmentFolder(file.path)) {
-      return;
+    if (this.organizingAttachmentPaths.has(file.path) || this.isExcludedPath(file.path) || this.isAttachmentInTargetLocation(file)) {
+      return false;
     }
     const attachmentFolder = this.targetAttachmentFolder(file);
     await this.ensureVaultFolder(attachmentFolder);
@@ -590,6 +597,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       if (!this.bulkAttachmentOrganizing) {
         new Notice(t(this.settings.language, "notice.attachmentMoved", { path: targetPath }));
       }
+      return true;
     } finally {
       this.organizingAttachmentPaths.delete(file.path);
       this.organizingAttachmentPaths.delete(targetPath);
@@ -611,6 +619,10 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   private isInAttachmentFolder(path: string): boolean {
     const folder = normalizePath(this.settings.attachmentFolder || DEFAULT_SETTINGS.attachmentFolder);
     return path === folder || path.startsWith(`${folder}/`);
+  }
+
+  private isAttachmentInTargetLocation(file: TFile): boolean {
+    return this.isInAttachmentFolder(file.path) && parentFolder(file.path) === this.targetAttachmentFolder(file);
   }
 
   private targetAttachmentFolder(file: TFile): string {
