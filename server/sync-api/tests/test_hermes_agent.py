@@ -1,6 +1,17 @@
 from types import SimpleNamespace
 
-from app.hermes_agent import HermesNoteIndex, decrypt_bytes, derive_kek, encrypt_file, github_repo_from_text, path_hash, route_item
+from app.hermes_agent import (
+    HermesNoteIndex,
+    compact_readme_points,
+    decrypt_bytes,
+    derive_kek,
+    encrypt_file,
+    github_project_title,
+    github_repo_from_text,
+    github_usefulness_note,
+    path_hash,
+    route_item,
+)
 
 
 def test_hermes_agent_encryption_roundtrip() -> None:
@@ -29,6 +40,8 @@ def test_hermes_agent_routes_new_note_by_rule() -> None:
 
 def test_github_repo_from_text() -> None:
     assert github_repo_from_text("https://github.com/physics-dimension/PriceAI") == ("physics-dimension", "PriceAI")
+    assert github_project_title("### GitHub 项目：PriceAI\n") == "PriceAI"
+    assert github_project_title("### GitHub 项目分析：PriceAI\n") == "PriceAI"
 
 
 def test_github_project_creates_project_note_in_related_folder() -> None:
@@ -55,3 +68,11 @@ def test_github_project_creates_project_note_in_related_folder() -> None:
 
     assert decision.action == "create_new"
     assert decision.target_path == "30-开发项目/Git开源项目/PriceAI.md"
+
+
+def test_github_summary_helpers_are_concise() -> None:
+    note = github_usefulness_note("AI subscription price tracker", "", ["ai", "price"], "TypeScript")
+    points = compact_readme_points("# PriceAI\n\nAI 订阅卡网渠道比价工具，聚合多个渠道报价。\n\n## 部署\n\n使用 Next.js。", 2)
+
+    assert note == "价格/比价/金融数据方向，适合作为开源项目卡片跟踪。"
+    assert points == ["PriceAI", "AI 订阅卡网渠道比价工具，聚合多个渠道报价。"]

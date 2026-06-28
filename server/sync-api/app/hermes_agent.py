@@ -329,7 +329,7 @@ def github_repo_from_text(content: str) -> tuple[str, str] | None:
 
 
 def github_project_title(content: str) -> str:
-    match = re.search(r"^### GitHub 项目分析：(.+)$", content, re.MULTILINE)
+    match = re.search(r"^### GitHub 项目(?:分析)?：(.+)$", content, re.MULTILINE)
     if not match:
         return ""
     return sanitize_filename(match.group(1).strip())
@@ -369,44 +369,38 @@ async def enrich_github_repository(content: str, owner: str, repo: str) -> str:
     archived = "是" if repo_data.get("archived") else "否"
     license_name = (repo_data.get("license") or {}).get("name") or "未声明"
     analysis = github_usefulness_note(description, readme_excerpt, topics, language)
+    readme_points = compact_readme_points(readme_excerpt, 3)
     lines = [
-        f"### GitHub 项目分析：{repo}",
+        f"### GitHub 项目：{repo}",
         "",
-        f"- 仓库：[{owner}/{repo}]({repo_url})",
-        f"- 定位：{description}",
-        f"- 主要语言：{language}",
-        f"- Stars/Forks：{stars} / {forks}",
-        f"- 最近更新：{updated_at}",
-        f"- License：{license_name}",
-        f"- Archived：{archived}",
+        f"> {description}",
+        "",
+        f"- 地址：[{owner}/{repo}]({repo_url})",
+        f"- 技术：{language}；Stars/Forks：{stars}/{forks}；License：{license_name}",
+        f"- 更新：{updated_at}；Archived：{archived}",
     ]
     if topics:
-        lines.append(f"- Topics：{', '.join(str(topic) for topic in topics[:12])}")
+        lines.append(f"- Topics：{', '.join(str(topic) for topic in topics[:8])}")
     if homepage:
-        lines.append(f"- Homepage：{homepage}")
+        lines.append(f"- 官网：{homepage}")
     lines.extend(
         [
             "",
-            "#### 初步判断",
-            "",
-            analysis,
+            f"- 速记：{analysis}",
         ]
     )
-    if readme_excerpt:
+    if readme_points:
         lines.extend(
             [
                 "",
-                "#### README 摘要",
-                "",
-                readme_excerpt,
+                "#### README 要点",
             ]
         )
+        lines.extend(f"- {point}" for point in readme_points)
     lines.extend(
         [
             "",
-            "#### 原始采集",
-            "",
-            content.strip(),
+            f"原始来源：{repo_url}",
         ]
     )
     return "\n".join(lines).strip()
@@ -421,7 +415,7 @@ async def fetch_github_readme_excerpt(client: httpx.AsyncClient, owner: str, rep
     for url in candidates:
         response = await client.get(url)
         if response.status_code == 200 and response.text.strip():
-            return compact_markdown_excerpt(response.text, 1200)
+            return compact_markdown_excerpt(response.text, 600)
     return ""
 
 
@@ -442,18 +436,34 @@ def compact_markdown_excerpt(markdown: str, limit: int) -> str:
 
 def github_usefulness_note(description: str, readme_excerpt: str, topics: list[str], language: str) -> str:
     text = f"{description}\n{readme_excerpt}\n{' '.join(topics)}".lower()
-    points: list[str] = []
     if any(keyword in text for keyword in ["stock", "price", "trading", "finance", "投资", "股票", "价格"]):
-        points.append("这是一个偏金融/价格分析方向的项目，适合归入投资、量化或数据分析资料。")
+        return "价格/比价/金融数据方向，适合作为开源项目卡片跟踪。"
     if any(keyword in text for keyword in ["ai", "agent", "llm", "machine learning", "deep learning", "人工智能", "模型"]):
-        points.append("项目包含 AI/模型相关信号，后续可以关注其模型输入、数据来源和预测流程。")
+        return "AI/模型相关项目，重点看数据来源、模型或服务入口。"
     if any(keyword in text for keyword in ["api", "server", "backend", "fastapi", "web"]):
-        points.append("它可能包含可部署服务或 API，适合进一步检查运行方式和接口设计。")
+        return "偏服务/API 项目，重点看部署方式和接口设计。"
     if language and language != "未知":
-        points.append(f"主要语言是 {language}，可优先查看依赖文件、入口文件和 README 的运行说明。")
-    if not points:
-        points.append("当前只能从仓库元数据做初步判断，建议继续查看 README、示例和最近提交来确认可用性。")
-    return "\n".join(f"- {point}" for point in points)
+        return f"{language} 项目，后续优先看依赖、入口和运行说明。"
+    return "已收录，后续可按 README、示例和最近提交继续判断可用性。"
+
+
+def compact_readme_points(readme_excerpt: str, limit: int) -> list[str]:
+    if not readme_excerpt:
+        return []
+    points: list[str] = []
+    for line in readme_excerpt.splitlines():
+        stripped = re.sub(r"<[^>]+>", "", line)
+        stripped = re.sub(r"!\[[^\]]*]\([^)]*\)", "", stripped)
+        stripped = re.sub(r"\[([^\]]+)]\([^)]*\)", r"\1", stripped)
+        stripped = re.sub(r"^[#>*\-\d.\s]+", "", stripped).strip()
+        if not stripped or stripped.lower().startswith(("http", "badge", "license")):
+            continue
+        if len(stripped) > 110:
+            stripped = f"{stripped[:107].rstrip()}..."
+        points.append(stripped)
+        if len(points) >= limit:
+            break
+    return points
 
 
 def parse_routing_rules(text: str) -> list[HermesRoutingRule]:
