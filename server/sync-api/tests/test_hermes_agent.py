@@ -16,6 +16,7 @@ def test_hermes_agent_routes_new_note_by_rule() -> None:
         hermes_agent_routing_rules="openai, ai => AI",
         hermes_agent_append_score_threshold=6,
         hermes_agent_create_folder="Inbox/Hermes",
+        hermes_agent_github_project_folder="30-开发项目/Git开源项目",
         hermes_agent_inbox_path="Inbox/Telegram.md",
     )
     item = SimpleNamespace(target_note_path="Inbox/Telegram.md", source_type="text")
@@ -35,6 +36,7 @@ def test_github_project_creates_project_note_in_related_folder() -> None:
         hermes_agent_routing_rules="ai, chatgpt, api => AI",
         hermes_agent_append_score_threshold=6,
         hermes_agent_create_folder="Inbox/Hermes",
+        hermes_agent_github_project_folder="30-开发项目/Git开源项目",
         hermes_agent_inbox_path="Inbox/Telegram.md",
         hermes_agent_exclusions="90-密钥凭证/**",
     )
@@ -52,4 +54,4 @@ def test_github_project_creates_project_note_in_related_folder() -> None:
     decision = route_item(settings, item, "### GitHub 项目分析：PriceAI\n\nChatGPT Claude API 比价", [existing])
 
     assert decision.action == "create_new"
-    assert decision.target_path == "10-AI工具与Agent/模型与网关/PriceAI.md"
+    assert decision.target_path == "30-开发项目/Git开源项目/PriceAI.md"

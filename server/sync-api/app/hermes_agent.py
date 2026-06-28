@@ -180,14 +180,14 @@ def route_item(settings: Settings, item: HermesQueue, content: str, index: list[
                 existing_note=note.note,
                 existing_content=note.content,
             )
-        target_folder = project_target_folder(settings, rule, best)
+        target_folder = normalize_path(settings.hermes_agent_github_project_folder)
         return HermesRouteDecision(
             action="create_new",
             target_path=unique_markdown_path(f"{target_folder}/{project_title}.md", [entry.path for entry in index]),
             title=project_title,
             heading="Hermes",
             content=content,
-            reason=f"GitHub project captured from {rule.target_folder} route." if rule else "GitHub project captured.",
+            reason="GitHub project captured into open-source project library.",
         )
     if best and best[0] >= threshold:
         note = best[1]

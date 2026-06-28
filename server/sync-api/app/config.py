@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     hermes_agent_vault_password: str = ""
     hermes_agent_interval_seconds: int = 60
     hermes_agent_create_folder: str = "Inbox/Hermes"
+    hermes_agent_github_project_folder: str = "30-开发项目/Git开源项目"
     hermes_agent_inbox_path: str = "Inbox/Telegram.md"
     hermes_agent_append_score_threshold: int = 6
     hermes_agent_exclusions: str = "90-密钥凭证/**\n.obsidian/**\n.obsidian-conflicts/**"
