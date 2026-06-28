@@ -26,7 +26,7 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Orphan attachment scanning.
 - First-run confirmation before organizing existing attachments.
 - Confirmed orphan cleanup to the system trash.
-- Telegram Bot intake service for queuing channel/group messages into the Hermes queue, with Obsidian-side import into local Markdown notes.
+- Telegram Bot intake service for queuing channel/group messages into the Hermes queue, with local Hermes Agent automation in Obsidian for importing and syncing notes.
 
 ## Attachment Management
 

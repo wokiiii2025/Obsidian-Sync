@@ -12,8 +12,12 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   crypto = new CryptoService();
   api = new SyncApi(() => this.settings.serverUrl, () => this.settings.token);
   intervalId: number | null = null;
+  hermesAgentIntervalId: number | null = null;
+  hermesAgentInitialTimeoutId: number | null = null;
   autoSyncTimeoutId: number | null = null;
   syncPromise: Promise<void> | null = null;
+  hermesAgentPromise: Promise<void> | null = null;
+  hermesAgentConfigKey = "";
   queuedAutoSync = false;
   organizingAttachmentPaths = new Set<string>();
   bulkAttachmentOrganizing = false;
@@ -89,6 +93,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     });
     this.registerFileWatchers();
     this.configureInterval();
+    this.configureHermesAgent();
     const initialAttachmentTimer = window.setTimeout(() => {
       this.promptInitialAttachmentOrganization().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
     }, 1500);
@@ -98,6 +103,12 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   onunload(): void {
     if (this.intervalId !== null) {
       window.clearInterval(this.intervalId);
+    }
+    if (this.hermesAgentIntervalId !== null) {
+      window.clearInterval(this.hermesAgentIntervalId);
+    }
+    if (this.hermesAgentInitialTimeoutId !== null) {
+      window.clearTimeout(this.hermesAgentInitialTimeoutId);
     }
     if (this.autoSyncTimeoutId !== null) {
       window.clearTimeout(this.autoSyncTimeoutId);
@@ -111,6 +122,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.configureInterval();
+    this.configureHermesAgent();
     this.updateStatusBar();
   }
 
@@ -238,7 +250,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     return this.telegramQueueItems;
   }
 
-  async importTelegramQueue(): Promise<number> {
+  async importTelegramQueue(silent = false): Promise<number> {
     const items = await this.api.hermesQueue();
     let imported = 0;
     for (const item of items) {
@@ -261,9 +273,16 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     }
     this.telegramQueueItems = [];
     if (imported > 0) {
-      this.scheduleAutoSync();
+      if (this.crypto.isUnlocked()) {
+        await this.syncNow();
+      } else {
+        this.settings.lastSyncStatus = "locked";
+        await this.saveSettings();
+      }
     }
-    new Notice(t(this.settings.language, "notice.telegramQueueImported", { count: imported }));
+    if (!silent || imported > 0) {
+      new Notice(t(this.settings.language, "notice.telegramQueueImported", { count: imported }));
+    }
     return imported;
   }
 
@@ -340,6 +359,48 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.intervalId = window.setInterval(() => {
       this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
     }, seconds * 1000);
+  }
+
+  private configureHermesAgent(): void {
+    const nextConfigKey = [
+      this.settings.hermesAgentEnabled ? "on" : "off",
+      this.settings.token ? "token" : "anonymous",
+      Math.max(30, this.settings.hermesAgentIntervalSeconds || 60)
+    ].join(":");
+    if (nextConfigKey === this.hermesAgentConfigKey) {
+      return;
+    }
+    this.hermesAgentConfigKey = nextConfigKey;
+    if (this.hermesAgentIntervalId !== null) {
+      window.clearInterval(this.hermesAgentIntervalId);
+      this.hermesAgentIntervalId = null;
+    }
+    if (this.hermesAgentInitialTimeoutId !== null) {
+      window.clearTimeout(this.hermesAgentInitialTimeoutId);
+      this.hermesAgentInitialTimeoutId = null;
+    }
+    if (!this.settings.hermesAgentEnabled || !this.settings.token) {
+      return;
+    }
+    const seconds = Math.max(30, this.settings.hermesAgentIntervalSeconds || 60);
+    const run = () => {
+      if (this.hermesAgentPromise) {
+        return;
+      }
+      this.hermesAgentPromise = this.importTelegramQueue(true)
+        .then(() => undefined)
+        .catch((error) => {
+          new Notice(t(this.settings.language, "notice.prefix", { message: error.message }));
+        })
+        .finally(() => {
+          this.hermesAgentPromise = null;
+        });
+    };
+    this.hermesAgentInitialTimeoutId = window.setTimeout(() => {
+      this.hermesAgentInitialTimeoutId = null;
+      run();
+    }, 3000);
+    this.hermesAgentIntervalId = window.setInterval(run, seconds * 1000);
   }
 
   private registerFileWatchers(): void {
@@ -701,6 +762,31 @@ class SyncSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.settings.autoSyncDebounceSeconds))
           .onChange(async (value) => {
             this.plugin.settings.autoSyncDebounceSeconds = Math.max(5, Number(value) || 60);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.enabled.name"))
+      .setDesc(t(language, "settings.hermesAgent.enabled.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.hermesAgentEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.hermesAgent.interval.name"))
+      .setDesc(t(language, "settings.hermesAgent.interval.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder("60")
+          .setValue(String(this.plugin.settings.hermesAgentIntervalSeconds))
+          .onChange(async (value) => {
+            this.plugin.settings.hermesAgentIntervalSeconds = Math.max(30, Number(value) || 60);
             await this.plugin.saveSettings();
           })
       );

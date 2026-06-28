@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
   autoSyncDebounceSeconds: 60,
+  hermesAgentEnabled: true,
+  hermesAgentIntervalSeconds: 60,
   syncMarkdown: true,
   syncImages: true,
   syncDocuments: true,

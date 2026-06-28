@@ -33,6 +33,8 @@ export interface PluginSettings {
   syncIntervalSeconds: number;
   autoSyncOnChange: boolean;
   autoSyncDebounceSeconds: number;
+  hermesAgentEnabled: boolean;
+  hermesAgentIntervalSeconds: number;
   syncMarkdown: boolean;
   syncImages: boolean;
   syncDocuments: boolean;
