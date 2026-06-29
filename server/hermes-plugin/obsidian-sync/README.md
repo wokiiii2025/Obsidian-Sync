@@ -25,6 +25,17 @@ Tools:
 `bin/process-queue.sh` runs Hermes in one-shot mode and asks it to process one pending queue item through the tools.
 It uses `terminal.exec` plus `bin/obsidian-sync-tool` for execution because this is compatible with the existing server Hermes provider.
 
+The helper accepts both argument-style calls and JSON stdin:
+
+```bash
+obsidian-sync-tool queue-next
+obsidian-sync-tool search "github project"
+obsidian-sync-tool read "Git开源项目/example.md"
+obsidian-sync-tool append "Git开源项目/example.md" "New analyzed content"
+printf '{"path":"Git开源项目/example.md","content":"New analyzed content"}' | obsidian-sync-tool update
+obsidian-sync-tool complete 123
+```
+
 Install the systemd units:
 
 ```bash

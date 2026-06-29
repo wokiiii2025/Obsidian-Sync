@@ -18,17 +18,22 @@ def main() -> int:
     if command == "queue-next":
         return output(request_json("GET", "/api/v1/hermes/tools/queue/next"))
     if command == "search":
-        return output(request_json("GET", "/api/v1/hermes/tools/notes/search", query={"query": arg("--query"), "limit": arg("--limit", "8")}))
+        query = arg("--query") or " ".join(sys.argv[2:])
+        return output(request_json("GET", "/api/v1/hermes/tools/notes/search", query={"query": query, "limit": arg("--limit", "8")}))
     if command == "read":
-        return output(request_json("GET", "/api/v1/hermes/tools/notes/read", query={"path": arg("--path")}))
+        return output(request_json("GET", "/api/v1/hermes/tools/notes/read", query={"path": arg("--path") or pos(2)}))
     if command in {"create", "update", "append", "fail"}:
-        payload = json.load(sys.stdin)
+        payload = read_stdin_json()
         if command == "fail":
-            item_id = payload.pop("item_id", payload.pop("id", None))
+            item_id = payload.pop("item_id", payload.pop("id", None)) or arg("--item-id") or arg("--id") or pos(2)
             return output(request_json("POST", f"/api/v1/hermes/tools/queue/{int(item_id)}/fail", body=payload))
+        if not payload:
+            payload = {"path": arg("--path") or pos(2), "content": arg("--content") or pos(3)}
+            if command == "append":
+                payload["heading"] = arg("--heading", "Hermes")
         return output(request_json("POST", f"/api/v1/hermes/tools/notes/{command}", body=payload))
     if command == "complete":
-        item_id = arg("--item-id") or arg("--id")
+        item_id = arg("--item-id") or arg("--id") or pos(2)
         return output(request_json("POST", f"/api/v1/hermes/tools/queue/{int(item_id)}/complete", body={}))
     print(json.dumps({"success": False, "error": f"unknown command: {command}"}))
     return 2
@@ -39,6 +44,21 @@ def arg(name: str, default: str = "") -> str:
         return default
     index = sys.argv.index(name)
     return sys.argv[index + 1] if index + 1 < len(sys.argv) else default
+
+
+def pos(index: int, default: str = "") -> str:
+    return sys.argv[index] if index < len(sys.argv) else default
+
+
+def read_stdin_json() -> dict:
+    raw = sys.stdin.read().strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON stdin: {exc}") from exc
+    return payload if isinstance(payload, dict) else {}
 
 
 def request_json(method: str, path: str, query: dict | None = None, body: dict | None = None) -> dict:
