@@ -20,10 +20,12 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from html import unescape
 
 HERMES_BIN = sys.argv[1]
 API_URL = os.environ.get("OBSIDIAN_SYNC_API_URL", "http://127.0.0.1:46990").rstrip("/")
 API_KEY = os.environ.get("HERMES_API_KEY", "")
+URL_COLLECTION_PATH = os.environ.get("OBSIDIAN_SYNC_URL_COLLECTION_PATH", "80-收藏与参考/链接收藏.md")
 
 
 def api(method, path, query=None, body=None):
@@ -74,6 +76,15 @@ def github_repo_from_text(text):
     if not match:
         return None
     return match.group(1), match.group(2).removesuffix(".git")
+
+
+def urls_from_text(text):
+    return re.findall(r"https?://[^\s<>)\]]+", text)
+
+
+def is_url_item(item):
+    text = " ".join(str(item.get(key) or "") for key in ("source_type", "target_note_path", "merge_content", "source_url"))
+    return "url" in text.lower() or bool(urls_from_text(text))
 
 
 def http_json(url):
@@ -159,6 +170,36 @@ def fetch_github_context(item):
     }
 
 
+def fetch_url_context(item):
+    text = " ".join(str(item.get(key) or "") for key in ("target_note_path", "merge_content", "source_url"))
+    urls = urls_from_text(text)
+    if not urls:
+        return None
+    url = urls[0].rstrip(".,，。")
+    if "github.com/" in url and github_repo_from_text(url):
+        return None
+    context = {"url": url, "title": "", "description": ""}
+    try:
+        html = http_text(url)[:120000]
+    except Exception as exc:
+        context["error"] = str(exc)
+        return context
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+    if title_match:
+        context["title"] = clean_html_text(title_match.group(1))[:180]
+    desc_match = re.search(r'<meta[^>]+(?:name|property)=["\'](?:description|og:description)["\'][^>]+content=["\']([^"\']+)["\']', html, re.I | re.S)
+    if desc_match:
+        context["description"] = clean_html_text(desc_match.group(1))[:300]
+    site_match = re.search(r'<meta[^>]+property=["\']og:site_name["\'][^>]+content=["\']([^"\']+)["\']', html, re.I | re.S)
+    if site_match:
+        context["site_name"] = clean_html_text(site_match.group(1))[:120]
+    return context
+
+
+def clean_html_text(value):
+    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", value))).strip()
+
+
 def extract_json(text):
     text = text.strip()
     if text.startswith("{") and text.endswith("}"):
@@ -173,7 +214,7 @@ def extract_json(text):
     raise ValueError("Hermes did not return JSON")
 
 
-def ask_hermes(item, candidates, github_context):
+def ask_hermes(item, candidates, github_context, url_context):
     prompt = f"""\
 You are the server-side Hermes automation for an Obsidian vault.
 
@@ -193,6 +234,8 @@ Rules:
 - Prefer append when a candidate note is clearly related.
 - Create a new note when the item is a distinct topic or project.
 - For GitHub repository links, use a concise project note under Git开源项目/<repo-name>.md unless a better matching candidate already exists.
+- For non-GitHub URLs, articles, webpages, and plain bookmark links, always append one compact entry to {URL_COLLECTION_PATH}. Do not create one note per normal URL.
+- For URL collection entries, include title when available, URL, source, capture time if present, and a short reason/tag. Keep each entry compact.
 - If GitHub context is provided, use it as factual source material. Do not write "待进一步查看 README", "后续补充", or vague guesses.
 - For GitHub project notes, the first Markdown heading must be the README title when available, otherwise use the repository description or a clear Chinese title. Do not use only the repository slug as the H1 unless no better title exists.
 - Keep GitHub project notes useful but not verbose: title, URL, description, tech stack, key features, architecture, deployment hints, why it is worth tracking, and source.
@@ -207,6 +250,12 @@ Candidate notes:
 
 GitHub context:
 {json.dumps(github_context, ensure_ascii=False)}
+
+URL collection path:
+{URL_COLLECTION_PATH}
+
+URL context:
+{json.dumps(url_context, ensure_ascii=False)}
 """
     process = subprocess.run(
         [HERMES_BIN, "--yolo", "-z", prompt],
@@ -252,6 +301,14 @@ def write_note(decision):
     return result
 
 
+def normalize_decision(item, decision, github_context, url_context):
+    if is_url_item(item) and not github_context and url_context:
+        decision["operation"] = "append"
+        decision["path"] = URL_COLLECTION_PATH
+        decision["heading"] = decision.get("heading") or "链接收藏"
+    return decision
+
+
 queue = api("GET", "/api/v1/hermes/tools/queue/next")
 item = queue.get("item")
 if not item:
@@ -262,7 +319,9 @@ item_id = item["id"]
 try:
     search = api("GET", "/api/v1/hermes/tools/notes/search", query={"query": build_search_query(item), "limit": "8"})
     github_context = fetch_github_context(item)
-    decision = ask_hermes(item, search.get("notes", []), github_context)
+    url_context = fetch_url_context(item) if not github_context else None
+    decision = ask_hermes(item, search.get("notes", []), github_context, url_context)
+    decision = normalize_decision(item, decision, github_context, url_context)
     result = write_note(decision)
     complete(item_id)
     print(f"processed queue item {item_id}: {result.get('operation')} {result.get('path')}")

@@ -7,6 +7,7 @@ Environment:
 ```bash
 OBSIDIAN_SYNC_API_URL=http://127.0.0.1:46990
 HERMES_API_KEY=<same value used by sync-api>
+OBSIDIAN_SYNC_URL_COLLECTION_PATH=80-收藏与参考/链接收藏.md
 ```
 
 Tools:
@@ -25,6 +26,7 @@ Tools:
 `bin/process-queue.sh` runs Hermes in one-shot mode and asks it to process one pending queue item through the tools.
 The worker script executes the Obsidian Sync API calls itself and uses the configured server Hermes model to decide the target note and Markdown content.
 This avoids depending on one-shot CLI tool-call execution while still using the server's active Hermes provider for analysis.
+GitHub repository URLs are written as project notes. Other URLs, articles, webpages, and plain bookmarks are appended to `OBSIDIAN_SYNC_URL_COLLECTION_PATH`.
 
 The helper accepts both argument-style calls and JSON stdin:
 
