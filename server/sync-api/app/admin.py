@@ -152,6 +152,8 @@ async def run_backup(settings: Settings) -> BackupResult:
                 upload_target=target,
             )
         except Exception as exc:
+            if backup_path.exists() and backup_path.stat().st_size == 0:
+                backup_path.unlink(missing_ok=True)
             result = BackupResult(
                 ok=False,
                 file=str(backup_path),
