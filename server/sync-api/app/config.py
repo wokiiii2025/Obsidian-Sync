@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     admin_backup_rclone_remote: str = ""
     admin_backup_rclone_config: str = ""
     admin_backup_timeout_seconds: int = 600
+    admin_public_url: str = ""
+    admin_google_client_id: str = ""
+    admin_google_client_secret: str = ""
+    admin_google_redirect_uri: str = ""
+    admin_google_token_file: str = "/app/backups/google-drive-token.json"
+    admin_google_drive_folder_id: str = ""
+    admin_google_drive_folder_name: str = "Obsidian Sync Backups"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -1,11 +1,16 @@
 import asyncio
+import base64
+import hashlib
+import hmac
+import json
 import os
 import shutil
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlencode, unquote, urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select, text
@@ -15,6 +20,11 @@ from app.database import SessionLocal
 from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 
 router = APIRouter()
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
+GOOGLE_DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 
 
 @dataclass
@@ -71,6 +81,7 @@ async def admin_status(settings: Settings = Depends(get_settings)) -> dict:
         "hermes_queue": {status: count for status, count in queue_rows},
         "hermes_agent_enabled": settings.hermes_agent_enabled,
         "backup": backup_config_snapshot(settings),
+        "google_drive": google_drive_status(settings),
         "last_backup": asdict(last_backup_result) if last_backup_result else None,
     }
 
@@ -115,6 +126,50 @@ async def run_backup_now(settings: Settings = Depends(get_settings)) -> dict:
     return asdict(result)
 
 
+@router.get("/admin/api/google-drive/status", dependencies=[Depends(require_admin_token)])
+async def admin_google_drive_status(settings: Settings = Depends(get_settings)) -> dict:
+    return google_drive_status(settings)
+
+
+@router.post("/admin/api/google-drive/auth-url", dependencies=[Depends(require_admin_token)])
+async def admin_google_drive_auth_url(settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.admin_google_client_id or not settings.admin_google_client_secret:
+        raise HTTPException(status_code=422, detail="Google OAuth client id or secret is not configured")
+    redirect_uri = google_redirect_uri(settings)
+    state = sign_google_state(settings)
+    params = {
+        "client_id": settings.admin_google_client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": GOOGLE_DRIVE_SCOPE,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return {"auth_url": f"{GOOGLE_AUTH_URL}?{urlencode(params)}", "redirect_uri": redirect_uri}
+
+
+@router.post("/admin/api/google-drive/disconnect", dependencies=[Depends(require_admin_token)])
+async def admin_google_drive_disconnect(settings: Settings = Depends(get_settings)) -> dict:
+    token_path = Path(settings.admin_google_token_file)
+    token_path.unlink(missing_ok=True)
+    return google_drive_status(settings)
+
+
+@router.get("/admin/google/callback", response_class=HTMLResponse)
+async def admin_google_drive_callback(code: str = "", state: str = "", error: str = "", settings: Settings = Depends(get_settings)) -> str:
+    if error:
+        return callback_html(False, f"Google authorization failed: {error}")
+    if not code or not verify_google_state(settings, state):
+        return callback_html(False, "Invalid or expired Google authorization state.")
+    try:
+        token = await exchange_google_code(settings, code)
+        save_google_token(settings, token)
+    except Exception as exc:
+        return callback_html(False, f"Failed to save Google Drive credentials: {exc}")
+    return callback_html(True, "Google Drive connected. You can close this page and return to the admin panel.")
+
+
 async def run_backup_loop(settings: Settings) -> None:
     if not settings.admin_backup_enabled:
         return
@@ -138,7 +193,11 @@ async def run_backup(settings: Settings) -> BackupResult:
             prune_local_backups(backup_dir, settings.admin_backup_keep_local)
             uploaded = False
             target = ""
-            if settings.admin_backup_rclone_remote:
+            if google_drive_status(settings)["connected"]:
+                target = settings.admin_google_drive_folder_name
+                await upload_to_google_drive(settings, backup_path)
+                uploaded = True
+            elif settings.admin_backup_rclone_remote:
                 target = settings.admin_backup_rclone_remote.rstrip("/")
                 await rclone_copy(settings, backup_path, target)
                 uploaded = True
@@ -239,6 +298,176 @@ def backup_config_snapshot(settings: Settings) -> dict:
     }
 
 
+def google_drive_status(settings: Settings) -> dict:
+    token_path = Path(settings.admin_google_token_file)
+    return {
+        "configured": bool(settings.admin_google_client_id and settings.admin_google_client_secret),
+        "connected": token_path.exists(),
+        "token_file": settings.admin_google_token_file,
+        "folder_id_configured": bool(settings.admin_google_drive_folder_id),
+        "folder_name": settings.admin_google_drive_folder_name,
+        "redirect_uri": google_redirect_uri(settings) if settings.admin_google_client_id else "",
+    }
+
+
+def google_redirect_uri(settings: Settings) -> str:
+    if settings.admin_google_redirect_uri:
+        return settings.admin_google_redirect_uri
+    public_url = settings.admin_public_url.rstrip("/")
+    if public_url:
+        return f"{public_url}/admin/google/callback"
+    return "/admin/google/callback"
+
+
+def sign_google_state(settings: Settings) -> str:
+    payload = json.dumps({"exp": int((datetime.now(UTC) + timedelta(minutes=15)).timestamp())}, separators=(",", ":")).encode()
+    payload_b64 = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
+    signature = hmac.new(state_secret(settings), payload_b64.encode(), hashlib.sha256).digest()
+    signature_b64 = base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
+    return f"{payload_b64}.{signature_b64}"
+
+
+def verify_google_state(settings: Settings, state: str) -> bool:
+    try:
+        payload_b64, signature_b64 = state.split(".", 1)
+        expected = hmac.new(state_secret(settings), payload_b64.encode(), hashlib.sha256).digest()
+        actual = base64.urlsafe_b64decode(signature_b64 + "=" * (-len(signature_b64) % 4))
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4)))
+    except Exception:
+        return False
+    return hmac.compare_digest(expected, actual) and int(payload.get("exp", 0)) >= int(datetime.now(UTC).timestamp())
+
+
+def state_secret(settings: Settings) -> bytes:
+    return (settings.admin_token or settings.jwt_secret).encode("utf-8")
+
+
+async def exchange_google_code(settings: Settings, code: str) -> dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": settings.admin_google_client_id,
+                "client_secret": settings.admin_google_client_secret,
+                "redirect_uri": google_redirect_uri(settings),
+                "grant_type": "authorization_code",
+            },
+        )
+        response.raise_for_status()
+        token = response.json()
+    if "refresh_token" not in token:
+        existing = load_google_token(settings)
+        if existing.get("refresh_token"):
+            token["refresh_token"] = existing["refresh_token"]
+        else:
+            raise RuntimeError("Google did not return a refresh token; reconnect with prompt consent.")
+    return token
+
+
+async def refresh_google_access_token(settings: Settings) -> str:
+    token = load_google_token(settings)
+    refresh_token = token.get("refresh_token")
+    if not refresh_token:
+        raise RuntimeError("Google Drive is not connected")
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": settings.admin_google_client_id,
+                "client_secret": settings.admin_google_client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+        response.raise_for_status()
+        refreshed = response.json()
+    token.update(refreshed)
+    token["refresh_token"] = refresh_token
+    save_google_token(settings, token)
+    return refreshed["access_token"]
+
+
+def load_google_token(settings: Settings) -> dict:
+    token_path = Path(settings.admin_google_token_file)
+    if not token_path.exists():
+        return {}
+    return json.loads(token_path.read_text(encoding="utf-8"))
+
+
+def save_google_token(settings: Settings, token: dict) -> None:
+    token_path = Path(settings.admin_google_token_file)
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text(json.dumps(token, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        token_path.chmod(0o600)
+    except OSError:
+        pass
+
+
+async def upload_to_google_drive(settings: Settings, backup_path: Path) -> str:
+    access_token = await refresh_google_access_token(settings)
+    folder_id = settings.admin_google_drive_folder_id or await ensure_google_drive_folder(settings, access_token)
+    metadata = {"name": backup_path.name}
+    if folder_id:
+        metadata["parents"] = [folder_id]
+    boundary = "obsidian-sync-boundary"
+    body = (
+        f"--{boundary}\r\n"
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+        f"{json.dumps(metadata, ensure_ascii=False)}\r\n"
+        f"--{boundary}\r\n"
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ).encode("utf-8") + backup_path.read_bytes() + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    async with httpx.AsyncClient(timeout=settings.admin_backup_timeout_seconds) as client:
+        response = await client.post(
+            GOOGLE_DRIVE_UPLOAD_URL,
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": f"multipart/related; boundary={boundary}"},
+            content=body,
+        )
+        response.raise_for_status()
+        return response.json().get("id", "")
+
+
+async def ensure_google_drive_folder(settings: Settings, access_token: str) -> str:
+    folder_name = settings.admin_google_drive_folder_name.strip()
+    if not folder_name:
+        return ""
+    escaped_folder_name = folder_name.replace("'", "\\'")
+    query = f"name='{escaped_folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            GOOGLE_DRIVE_FILES_URL,
+            params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        response.raise_for_status()
+        files = response.json().get("files", [])
+        if files:
+            return files[0]["id"]
+        response = await client.post(
+            GOOGLE_DRIVE_FILES_URL,
+            params={"fields": "id"},
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            json={"name": folder_name, "mimeType": "application/vnd.google-apps.folder"},
+        )
+        response.raise_for_status()
+        return response.json()["id"]
+
+
+def callback_html(ok: bool, message: str) -> str:
+    status_text = "连接成功" if ok else "连接失败"
+    color = "#166534" if ok else "#991b1b"
+    return f"""
+    <!doctype html>
+    <html lang="zh-CN"><head><meta charset="utf-8"><title>Google Drive</title></head>
+    <body style="font-family: system-ui, sans-serif; padding: 32px;">
+      <h1 style="color:{color}">{status_text}</h1>
+      <p>{message}</p>
+    </body></html>
+    """
+
+
 ADMIN_HTML = """
 <!doctype html>
 <html lang="zh-CN">
@@ -291,6 +520,14 @@ ADMIN_HTML = """
         <div id="backupResult" class="muted" style="margin-top:10px"></div>
       </div>
       <div class="card">
+        <h2>Google Drive</h2>
+        <div id="googleDriveStatus" class="muted"></div>
+        <div class="toolbar" style="margin-top:12px">
+          <button onclick="connectGoogleDrive()">连接 Google Drive</button>
+          <button class="secondary" onclick="disconnectGoogleDrive()">断开</button>
+        </div>
+      </div>
+      <div class="card">
         <h2>Hermes 队列</h2>
         <div id="hermesSummary" class="muted"></div>
       </div>
@@ -322,6 +559,8 @@ ADMIN_HTML = """
       ].map(([name, value]) => `<div class="card"><div class="muted">${name}</div><div class="metric">${value}</div></div>`).join('');
       const b = data.backup;
       document.getElementById('backupConfig').innerHTML = `定时：<b class="${b.enabled ? 'ok' : 'bad'}">${b.enabled ? '开启' : '关闭'}</b>；间隔：${b.interval_hours}h；目录：<code>${b.directory}</code>；Google Drive/rclone：${b.rclone_remote_configured ? '<span class="ok">已配置</span>' : '<span class="bad">未配置</span>'}`;
+      const g = data.google_drive;
+      document.getElementById('googleDriveStatus').innerHTML = `OAuth：${g.configured ? '<span class="ok">已配置</span>' : '<span class="bad">未配置 Client</span>'}；连接：${g.connected ? '<span class="ok">已连接</span>' : '<span class="bad">未连接</span>'}；目录：<code>${g.folder_name}</code>`;
       document.getElementById('backupResult').textContent = data.last_backup ? JSON.stringify(data.last_backup) : '暂无备份记录';
       document.getElementById('hermesSummary').textContent = JSON.stringify(data.hermes_queue);
     }
@@ -338,6 +577,14 @@ ADMIN_HTML = """
       const data = await api('/admin/api/backups/run', { method: 'POST' });
       document.getElementById('backupResult').innerHTML = data.ok ? `<span class="ok">成功</span> ${data.file} ${data.uploaded ? '已上传' : ''}` : `<span class="bad">失败</span> ${data.error}`;
       await loadBackups();
+    }
+    async function connectGoogleDrive(){
+      const data = await api('/admin/api/google-drive/auth-url', { method: 'POST' });
+      window.open(data.auth_url, '_blank', 'noopener,noreferrer');
+    }
+    async function disconnectGoogleDrive(){
+      await api('/admin/api/google-drive/disconnect', { method: 'POST' });
+      await loadStatus();
     }
     refreshAll().catch(err => { document.getElementById('metrics').innerHTML = `<div class="card bad">${err.message}</div>`; });
   </script>

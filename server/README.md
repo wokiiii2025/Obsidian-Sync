@@ -97,7 +97,38 @@ Manual backups are always available from the admin panel. `ADMIN_BACKUP_ENABLED=
 
 ### Google Drive backup
 
-Google Drive backup is supported through `rclone`. This still uses normal Google account login and OAuth authorization, but the credential is stored in the mounted rclone config file instead of the application database. When `ADMIN_BACKUP_RCLONE_REMOTE` is configured, every successful manual backup, and any scheduled backup if enabled, is copied to the configured Google Drive folder.
+Google Drive backup can be connected directly from the web admin panel through Google OAuth.
+
+Create an OAuth 2.0 Client in Google Cloud Console:
+
+1. Enable the Google Drive API.
+2. Configure the OAuth consent screen.
+3. Create an OAuth client with type `Web application`.
+4. Add the authorized redirect URI:
+
+```text
+https://<your-domain>/admin/google/callback
+```
+
+If the service is exposed only by IP and plain HTTP, Google may reject the redirect URI. A real HTTPS domain is recommended for this flow.
+
+Set:
+
+```bash
+ADMIN_PUBLIC_URL=https://<your-domain>
+ADMIN_GOOGLE_CLIENT_ID=<google-oauth-client-id>
+ADMIN_GOOGLE_CLIENT_SECRET=<google-oauth-client-secret>
+ADMIN_GOOGLE_TOKEN_FILE=/app/backups/google-drive-token.json
+ADMIN_GOOGLE_DRIVE_FOLDER_NAME=Obsidian Sync Backups
+```
+
+Then restart the API service, open `/admin`, and click `Connect Google Drive`. The service requests the `https://www.googleapis.com/auth/drive.file` scope, stores the refresh token in `ADMIN_GOOGLE_TOKEN_FILE`, and uploads every successful manual backup to the configured Drive folder. Scheduled backups are uploaded too if `ADMIN_BACKUP_ENABLED=true`.
+
+The older rclone integration is still supported as a fallback. If direct Google Drive OAuth is connected, direct Google Drive upload is preferred over rclone.
+
+#### rclone fallback
+
+Google Drive backup is also supported through `rclone`. This keeps Google OAuth credentials out of the application database and lets the same backup job target other storage providers later.
 
 Create the mounted config directory on the server:
 

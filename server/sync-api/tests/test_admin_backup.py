@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.admin import pg_dump, prune_local_backups
+from app.admin import google_drive_status, sign_google_state, verify_google_state
 
 
 def test_prune_local_backups_keeps_newest_files(tmp_path: Path) -> None:
@@ -18,6 +19,35 @@ def test_prune_local_backups_keeps_newest_files(tmp_path: Path) -> None:
     prune_local_backups(tmp_path, keep=2)
 
     assert sorted(file.name for file in tmp_path.glob("*.dump")) == ["backup-2.dump", "backup-3.dump"]
+
+
+def test_google_state_roundtrip() -> None:
+    settings = SimpleNamespace(admin_token="admin-secret", jwt_secret="jwt-secret")
+    state = sign_google_state(settings)
+
+    assert verify_google_state(settings, state)
+    assert not verify_google_state(SimpleNamespace(admin_token="other", jwt_secret="jwt-secret"), state)
+
+
+def test_google_drive_status_reflects_token_file(tmp_path: Path) -> None:
+    token_file = tmp_path / "google-token.json"
+    token_file.write_text('{"refresh_token":"x"}', encoding="utf-8")
+    settings = SimpleNamespace(
+        admin_google_token_file=str(token_file),
+        admin_google_client_id="client",
+        admin_google_client_secret="secret",
+        admin_google_drive_folder_id="",
+        admin_google_drive_folder_name="Backups",
+        admin_google_redirect_uri="https://example.com/admin/google/callback",
+        admin_public_url="",
+    )
+
+    status = google_drive_status(settings)
+
+    assert status["configured"] is True
+    assert status["connected"] is True
+    assert status["folder_name"] == "Backups"
+    assert status["redirect_uri"] == "https://example.com/admin/google/callback"
 
 
 @pytest.mark.anyio
