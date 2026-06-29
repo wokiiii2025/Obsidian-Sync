@@ -108,6 +108,14 @@ def compact_markdown(markdown, limit=1800):
     return "\n".join(lines)[:limit].rstrip()
 
 
+def markdown_title(markdown):
+    for line in markdown.splitlines():
+        match = re.match(r"^#\s+(.+?)\s*$", line.strip())
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
 def fetch_readme(owner, repo, branch):
     for filename in ("README.md", "readme.md", "README.rst", "README.MD"):
         url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{filename}"
@@ -128,6 +136,7 @@ def fetch_github_context(item):
     owner, repo = repo_match
     repo_data = http_json(f"https://api.github.com/repos/{owner}/{repo}")
     branch = repo_data.get("default_branch") or "main"
+    readme = fetch_readme(owner, repo, branch)
     return {
         "owner": owner,
         "repo": repo,
@@ -145,7 +154,8 @@ def fetch_github_context(item):
         "updated_at": repo_data.get("updated_at") or "",
         "created_at": repo_data.get("created_at") or "",
         "archived": bool(repo_data.get("archived")),
-        "readme_excerpt": fetch_readme(owner, repo, branch),
+        "readme_title": markdown_title(readme),
+        "readme_excerpt": readme,
     }
 
 
@@ -184,6 +194,7 @@ Rules:
 - Create a new note when the item is a distinct topic or project.
 - For GitHub repository links, use a concise project note under Git开源项目/<repo-name>.md unless a better matching candidate already exists.
 - If GitHub context is provided, use it as factual source material. Do not write "待进一步查看 README", "后续补充", or vague guesses.
+- For GitHub project notes, the first Markdown heading must be the README title when available, otherwise use the repository description or a clear Chinese title. Do not use only the repository slug as the H1 unless no better title exists.
 - Keep GitHub project notes useful but not verbose: title, URL, description, tech stack, key features, architecture, deployment hints, why it is worth tracking, and source.
 - Do not merge unrelated projects into an existing note.
 - Never include secrets.
