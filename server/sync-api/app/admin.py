@@ -496,18 +496,32 @@ ADMIN_HTML = """
     code { color: #bfdbfe; }
     .ok { color: #86efac; }
     .bad { color: #fca5a5; }
+    .hidden { display: none; }
+    .login { min-height: calc(100vh - 82px); display: grid; place-items: center; padding: 24px; }
+    .login .card { width: min(420px, 100%); }
+    .login input { width: 100%; box-sizing: border-box; margin: 10px 0; }
   </style>
 </head>
 <body>
   <header>
     <h1>Obsidian Sync Admin</h1>
     <div class="toolbar">
-      <input id="token" type="password" placeholder="ADMIN_TOKEN" />
-      <button class="secondary" onclick="saveToken()">保存令牌</button>
+      <button class="secondary" onclick="logout()">退出</button>
       <button onclick="refreshAll()">刷新</button>
     </div>
   </header>
-  <main>
+  <section id="login" class="login">
+    <div class="card">
+      <h2>管理面板登录</h2>
+      <div class="muted">请输入服务器 ADMIN_TOKEN。</div>
+      <input id="token" type="password" placeholder="ADMIN_TOKEN" onkeydown="if(event.key === 'Enter') saveToken()" />
+      <div class="toolbar">
+        <button onclick="saveToken()">登录</button>
+      </div>
+      <div id="loginError" class="bad" style="margin-top:10px"></div>
+    </div>
+  </section>
+  <main id="dashboard" class="hidden">
     <section class="grid" id="metrics"></section>
     <section class="grid" style="margin-top:14px">
       <div class="card">
@@ -544,7 +558,27 @@ ADMIN_HTML = """
   <script>
     const tokenInput = document.getElementById('token');
     tokenInput.value = localStorage.getItem('adminToken') || '';
-    function saveToken(){ localStorage.setItem('adminToken', tokenInput.value); refreshAll(); }
+    function showDashboard(show){
+      document.getElementById('login').classList.toggle('hidden', show);
+      document.getElementById('dashboard').classList.toggle('hidden', !show);
+    }
+    async function saveToken(){
+      localStorage.setItem('adminToken', tokenInput.value);
+      try {
+        await loadStatus();
+        showDashboard(true);
+        document.getElementById('loginError').textContent = '';
+        await Promise.allSettled([loadBackups(), loadHermes()]);
+      } catch (err) {
+        showDashboard(false);
+        document.getElementById('loginError').textContent = '令牌无效或服务不可用';
+      }
+    }
+    function logout(){
+      localStorage.removeItem('adminToken');
+      tokenInput.value = '';
+      showDashboard(false);
+    }
     async function api(path, options = {}) {
       const res = await fetch(path, { ...options, headers: { 'X-Admin-Token': tokenInput.value, ...(options.headers || {}) } });
       if (!res.ok) throw new Error(await res.text());
@@ -586,7 +620,11 @@ ADMIN_HTML = """
       await api('/admin/api/google-drive/disconnect', { method: 'POST' });
       await loadStatus();
     }
-    refreshAll().catch(err => { document.getElementById('metrics').innerHTML = `<div class="card bad">${err.message}</div>`; });
+    if (tokenInput.value) {
+      saveToken();
+    } else {
+      showDashboard(false);
+    }
   </script>
 </body>
 </html>
