@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ -f /root/.hermes/.env ]; then
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+HERMES_BIN="${HERMES_BIN:-$HERMES_HOME/hermes-agent/venv/bin/hermes}"
+
+if [ -f "$HERMES_HOME/.env" ]; then
   set -a
   # shellcheck disable=SC1091
-  . /root/.hermes/.env
+  . "$HERMES_HOME/.env"
   set +a
 fi
 
-exec hermes -t obsidian_sync -z "$(
+exec "$HERMES_BIN" -t hermes-cli,obsidian_sync -z "$(
   cat <<'PROMPT'
 Process one pending Obsidian Sync Hermes queue item.
 

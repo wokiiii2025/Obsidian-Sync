@@ -4,6 +4,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=root
+User=hermes
 WorkingDirectory=/home/obsidian-server
-ExecStart=/root/.hermes/plugins/obsidian-sync/bin/process-queue.sh
+Environment=HOME=/home/hermes
+Environment=HERMES_HOME=/home/hermes/.hermes
+ExecStart=/home/hermes/.hermes/plugins/obsidian-sync/bin/process-queue.sh
