@@ -23,7 +23,8 @@ Tools:
 ## Queue worker
 
 `bin/process-queue.sh` runs Hermes in one-shot mode and asks it to process one pending queue item through the tools.
-It uses `terminal.exec` plus `bin/obsidian-sync-tool` for execution because this is compatible with the existing server Hermes provider.
+The worker script executes the Obsidian Sync API calls itself and uses the configured server Hermes model to decide the target note and Markdown content.
+This avoids depending on one-shot CLI tool-call execution while still using the server's active Hermes provider for analysis.
 
 The helper accepts both argument-style calls and JSON stdin:
 
