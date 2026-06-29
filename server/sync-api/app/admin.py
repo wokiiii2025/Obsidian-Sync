@@ -563,6 +563,7 @@ ADMIN_HTML = """
       document.getElementById('dashboard').classList.toggle('hidden', !show);
     }
     async function saveToken(){
+      tokenInput.value = tokenInput.value.trim();
       localStorage.setItem('adminToken', tokenInput.value);
       try {
         await loadStatus();
@@ -571,7 +572,7 @@ ADMIN_HTML = """
         await Promise.allSettled([loadBackups(), loadHermes()]);
       } catch (err) {
         showDashboard(false);
-        document.getElementById('loginError').textContent = '令牌无效或服务不可用';
+        document.getElementById('loginError').textContent = `登录失败：${err.message}`;
       }
     }
     function logout(){
