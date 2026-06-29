@@ -14,6 +14,7 @@ from app.admin import router as admin_router, run_backup_loop
 from app.config import get_settings
 from app.database import SessionLocal, engine, get_session
 from app.hermes_agent import run_hermes_agent_loop
+from app.hermes_tools import router as hermes_tools_router
 from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 from app.schemas import (
     AcceptedChange,
@@ -56,6 +57,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(admin_router)
+app.include_router(hermes_tools_router)
 
 
 @app.on_event("startup")

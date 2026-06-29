@@ -1,0 +1,6 @@
+name: obsidian-sync
+version: "1.0"
+description: Tools for reading and writing the Obsidian Sync vault through the sync API.
+requires_env:
+  - OBSIDIAN_SYNC_API_URL
+  - HERMES_API_KEY
