@@ -11,9 +11,11 @@ if [ -f "$HERMES_HOME/.env" ]; then
   set +a
 fi
 
-set +e
-"$HERMES_BIN" --yolo -t hermes-cli,obsidian_sync -z "$(
-  cat <<'PROMPT'
+python3 - "$HERMES_BIN" <<'PY'
+import subprocess
+import sys
+
+prompt = """\
 Process one pending Obsidian Sync Hermes queue item.
 
 Rules:
@@ -27,10 +29,17 @@ Rules:
 8. After a successful write, run: obsidian-sync-tool complete --item-id <id>
 9. If you cannot safely process the item, run: obsidian-sync-tool fail with JSON {"item_id": <id>, "error": "..."} on stdin.
 10. Keep the final reply short and include the target path.
-PROMPT
-)"
-status=$?
-if [ "$status" -eq 134 ]; then
-  exit 0
-fi
-exit "$status"
+"""
+
+process = subprocess.run(
+    [sys.argv[1], "--yolo", "-t", "hermes-cli,obsidian_sync", "-z", prompt],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+)
+if process.stdout:
+    print(process.stdout, end="")
+if process.returncode in {0, 134, -6}:
+    raise SystemExit(0)
+raise SystemExit(process.returncode)
+PY
