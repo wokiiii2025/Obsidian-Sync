@@ -233,7 +233,7 @@ def write_note(decision):
 
     result, error = api_write("POST", f"/api/v1/hermes/tools/notes/{operation}", {"path": path, "content": content})
     if error and operation == "create" and error[0] == 409:
-        result, error = api_write("POST", "/api/v1/hermes/tools/notes/append", {"path": path, "content": content, "heading": heading})
+        result, error = api_write("POST", "/api/v1/hermes/tools/notes/update", {"path": path, "content": content})
     if error and operation == "update" and error[0] == 404:
         result, error = api_write("POST", "/api/v1/hermes/tools/notes/create", {"path": path, "content": content})
     if error:
