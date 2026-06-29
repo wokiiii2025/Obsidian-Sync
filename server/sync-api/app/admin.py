@@ -496,10 +496,10 @@ ADMIN_HTML = """
     code { color: #bfdbfe; }
     .ok { color: #86efac; }
     .bad { color: #fca5a5; }
-    .hidden { display: none; }
     .login { min-height: calc(100vh - 82px); display: grid; place-items: center; padding: 24px; }
     .login .card { width: min(420px, 100%); }
     .login input { width: 100%; box-sizing: border-box; margin: 10px 0; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
