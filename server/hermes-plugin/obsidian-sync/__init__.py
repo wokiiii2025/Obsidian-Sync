@@ -10,10 +10,10 @@ API_KEY = os.environ.get("HERMES_API_KEY", "")
 
 
 def register(ctx):
-    register_tool(ctx, "obsidian_queue_next", "Get the next pending Telegram/Hermes queue item.", {}, lambda params: request_json("GET", "/api/v1/hermes/tools/queue/next"))
+    register_tool(ctx, "obsidian_sync_queue_next", "Get the next pending Obsidian Sync Hermes queue item.", {}, lambda params: request_json("GET", "/api/v1/hermes/tools/queue/next"))
     register_tool(
         ctx,
-        "obsidian_search_notes",
+        "obsidian_sync_search_notes",
         "Search Obsidian notes before deciding where to write new content.",
         {
             "query": {"type": "string", "description": "Search text or topic."},
@@ -23,7 +23,7 @@ def register(ctx):
     )
     register_tool(
         ctx,
-        "obsidian_read_note",
+        "obsidian_sync_read_note",
         "Read one Obsidian note by path.",
         {"path": {"type": "string", "description": "Vault-relative note path."}},
         lambda params: request_json("GET", "/api/v1/hermes/tools/notes/read", query=params),
@@ -31,7 +31,7 @@ def register(ctx):
     )
     register_tool(
         ctx,
-        "obsidian_create_note",
+        "obsidian_sync_create_note",
         "Create a new Obsidian markdown note.",
         {"path": {"type": "string"}, "content": {"type": "string"}},
         lambda params: request_json("POST", "/api/v1/hermes/tools/notes/create", body=params),
@@ -39,7 +39,7 @@ def register(ctx):
     )
     register_tool(
         ctx,
-        "obsidian_update_note",
+        "obsidian_sync_update_note",
         "Replace an existing Obsidian markdown note.",
         {"path": {"type": "string"}, "content": {"type": "string"}},
         lambda params: request_json("POST", "/api/v1/hermes/tools/notes/update", body=params),
@@ -47,7 +47,7 @@ def register(ctx):
     )
     register_tool(
         ctx,
-        "obsidian_append_note",
+        "obsidian_sync_append_note",
         "Append content to an existing Obsidian markdown note under a heading.",
         {"path": {"type": "string"}, "content": {"type": "string"}, "heading": {"type": "string", "default": "Hermes"}},
         lambda params: request_json("POST", "/api/v1/hermes/tools/notes/append", body=params),
@@ -55,18 +55,18 @@ def register(ctx):
     )
     register_tool(
         ctx,
-        "obsidian_complete_queue",
+        "obsidian_sync_complete_queue",
         "Mark a Hermes queue item as completed after writing the note.",
         {"item_id": {"type": "integer"}},
-        lambda params: request_json("POST", f"/api/v1/hermes/tools/queue/{int(params['item_id'])}/complete", body={}),
+        lambda params: request_json("POST", f"/api/v1/hermes/tools/queue/{int(params.get('item_id', params.get('id')))}/complete", body={}),
         required=["item_id"],
     )
     register_tool(
         ctx,
-        "obsidian_fail_queue",
+        "obsidian_sync_fail_queue",
         "Mark a Hermes queue item as failed when processing cannot be completed.",
         {"item_id": {"type": "integer"}, "error": {"type": "string"}},
-        lambda params: request_json("POST", f"/api/v1/hermes/tools/queue/{int(params['item_id'])}/fail", body={"error": params["error"]}),
+        lambda params: request_json("POST", f"/api/v1/hermes/tools/queue/{int(params.get('item_id', params.get('id')))}/fail", body={"error": params["error"]}),
         required=["item_id", "error"],
     )
 

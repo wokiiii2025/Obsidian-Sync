@@ -11,14 +11,14 @@ HERMES_API_KEY=<same value used by sync-api>
 
 Tools:
 
-- `obsidian_queue_next`
-- `obsidian_search_notes`
-- `obsidian_read_note`
-- `obsidian_create_note`
-- `obsidian_update_note`
-- `obsidian_append_note`
-- `obsidian_complete_queue`
-- `obsidian_fail_queue`
+- `obsidian_sync_queue_next`
+- `obsidian_sync_search_notes`
+- `obsidian_sync_read_note`
+- `obsidian_sync_create_note`
+- `obsidian_sync_update_note`
+- `obsidian_sync_append_note`
+- `obsidian_sync_complete_queue`
+- `obsidian_sync_fail_queue`
 
 ## Queue worker
 
