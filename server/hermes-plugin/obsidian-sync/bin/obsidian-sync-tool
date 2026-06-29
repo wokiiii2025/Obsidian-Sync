@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+import urllib.parse
+import urllib.request
+
+
+API_URL = os.environ.get("OBSIDIAN_SYNC_API_URL", "http://127.0.0.1:46990").rstrip("/")
+API_KEY = os.environ.get("HERMES_API_KEY", "")
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print(json.dumps({"success": False, "error": "missing command"}))
+        return 2
+    command = sys.argv[1]
+    if command == "queue-next":
+        return output(request_json("GET", "/api/v1/hermes/tools/queue/next"))
+    if command == "search":
+        return output(request_json("GET", "/api/v1/hermes/tools/notes/search", query={"query": arg("--query"), "limit": arg("--limit", "8")}))
+    if command == "read":
+        return output(request_json("GET", "/api/v1/hermes/tools/notes/read", query={"path": arg("--path")}))
+    if command in {"create", "update", "append", "fail"}:
+        payload = json.load(sys.stdin)
+        if command == "fail":
+            item_id = payload.pop("item_id", payload.pop("id", None))
+            return output(request_json("POST", f"/api/v1/hermes/tools/queue/{int(item_id)}/fail", body=payload))
+        return output(request_json("POST", f"/api/v1/hermes/tools/notes/{command}", body=payload))
+    if command == "complete":
+        item_id = arg("--item-id") or arg("--id")
+        return output(request_json("POST", f"/api/v1/hermes/tools/queue/{int(item_id)}/complete", body={}))
+    print(json.dumps({"success": False, "error": f"unknown command: {command}"}))
+    return 2
+
+
+def arg(name: str, default: str = "") -> str:
+    if name not in sys.argv:
+        return default
+    index = sys.argv.index(name)
+    return sys.argv[index + 1] if index + 1 < len(sys.argv) else default
+
+
+def request_json(method: str, path: str, query: dict | None = None, body: dict | None = None) -> dict:
+    if not API_KEY:
+        return {"success": False, "error": "HERMES_API_KEY is not configured"}
+    url = f"{API_URL}{path}"
+    if query:
+        clean_query = {key: value for key, value in query.items() if value not in {None, ""}}
+        url = f"{url}?{urllib.parse.urlencode(clean_query)}"
+    data = None
+    headers = {"X-API-Key": API_KEY, "Accept": "application/json"}
+    if body is not None:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = response.read().decode("utf-8")
+            return {"success": True, "data": json.loads(payload) if payload else None}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def output(payload: dict) -> int:
+    print(json.dumps(payload, ensure_ascii=False))
+    return 0 if payload.get("success") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

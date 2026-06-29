@@ -23,6 +23,7 @@ Tools:
 ## Queue worker
 
 `bin/process-queue.sh` runs Hermes in one-shot mode and asks it to process one pending queue item through the tools.
+It uses `terminal.exec` plus `bin/obsidian-sync-tool` for execution because this is compatible with the existing server Hermes provider.
 
 Install the systemd units:
 
