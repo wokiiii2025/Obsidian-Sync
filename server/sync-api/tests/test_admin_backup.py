@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.admin import create_backup_archive, pg_dump, prune_local_backups
+from app.admin import create_backup_archive, pg_dump, prune_google_drive_backups, prune_local_backups
 from app.admin import google_drive_status, sign_google_state, verify_google_state
 
 
@@ -89,3 +89,51 @@ async def test_pg_dump_uses_decoded_database_url(monkeypatch, tmp_path: Path) ->
     assert captured["command"][-1] == "obsidian_sync"
     assert captured["env"]["PGPASSWORD"] == "p@ss/word"
     assert captured["timeout"] == 123
+
+
+@pytest.mark.anyio
+async def test_prune_google_drive_backups_deletes_old_files(monkeypatch) -> None:
+    deleted = []
+
+    class FakeResponse:
+        def __init__(self, payload=None):
+            self.payload = payload or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class FakeClient:
+        def __init__(self, timeout=30):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, *args, **kwargs):
+            return FakeResponse(
+                {
+                    "files": [
+                        {"id": "1", "name": "obsidian-sync-1.zip"},
+                        {"id": "2", "name": "obsidian-sync-2.zip"},
+                        {"id": "3", "name": "obsidian-sync-3.zip"},
+                        {"id": "4", "name": "obsidian-sync-4.zip"},
+                    ]
+                }
+            )
+
+        async def delete(self, url, **kwargs):
+            deleted.append(url)
+            return FakeResponse()
+
+    monkeypatch.setattr("app.admin.httpx.AsyncClient", FakeClient)
+    settings = SimpleNamespace(admin_backup_keep_local=3)
+
+    await prune_google_drive_backups(settings, "access-token", "folder-id")
+
+    assert deleted == ["https://www.googleapis.com/drive/v3/files/4"]

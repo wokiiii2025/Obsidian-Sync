@@ -458,7 +458,10 @@ async def upload_to_google_drive(settings: Settings, backup_path: Path) -> str:
             content=body,
         )
         response.raise_for_status()
-        return response.json().get("id", "")
+        file_id = response.json().get("id", "")
+    if folder_id:
+        await prune_google_drive_backups(settings, access_token, folder_id)
+    return file_id
 
 
 async def ensure_google_drive_folder(settings: Settings, access_token: str) -> str:
@@ -485,6 +488,26 @@ async def ensure_google_drive_folder(settings: Settings, access_token: str) -> s
         )
         response.raise_for_status()
         return response.json()["id"]
+
+
+async def prune_google_drive_backups(settings: Settings, access_token: str, folder_id: str) -> None:
+    keep = settings.admin_backup_keep_local
+    if keep <= 0:
+        return
+    query = f"'{folder_id}' in parents and name contains 'obsidian-sync-' and name contains '.zip' and trashed=false"
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            GOOGLE_DRIVE_FILES_URL,
+            params={"q": query, "fields": "files(id,name,createdTime)", "orderBy": "createdTime desc", "pageSize": 100},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        response.raise_for_status()
+        files = response.json().get("files", [])
+        for file in files[keep:]:
+            await client.delete(
+                f"{GOOGLE_DRIVE_FILES_URL}/{file['id']}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
 
 
 def callback_html(ok: bool, message: str) -> str:

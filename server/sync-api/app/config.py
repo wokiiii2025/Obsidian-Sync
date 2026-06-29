@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     admin_backup_enabled: bool = False
     admin_backup_interval_hours: int = 24
     admin_backup_directory: str = "/app/backups"
-    admin_backup_keep_local: int = 14
+    admin_backup_keep_local: int = 3
     admin_backup_rclone_remote: str = ""
     admin_backup_rclone_config: str = ""
     admin_backup_timeout_seconds: int = 600

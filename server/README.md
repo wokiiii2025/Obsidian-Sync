@@ -77,7 +77,7 @@ Default environment:
 ADMIN_BACKUP_ENABLED=false
 ADMIN_BACKUP_INTERVAL_HOURS=24
 ADMIN_BACKUP_DIRECTORY=/app/backups
-ADMIN_BACKUP_KEEP_LOCAL=14
+ADMIN_BACKUP_KEEP_LOCAL=3
 ADMIN_BACKUP_TIMEOUT_SECONDS=600
 ```
 
@@ -93,7 +93,7 @@ The backup file format is PostgreSQL custom dump (`*.dump`). To restore one manu
 pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" backups/obsidian-sync-YYYYMMDD-HHMMSS.dump
 ```
 
-Manual backups are always available from the admin panel. `ADMIN_BACKUP_ENABLED=true` only controls the background scheduled backup loop. Leave it as `false` if backups should run only when an administrator clicks the button.
+Manual backups are always available from the admin panel. `ADMIN_BACKUP_ENABLED=true` only controls the background scheduled backup loop. Leave it as `false` if backups should run only when an administrator clicks the button. `ADMIN_BACKUP_KEEP_LOCAL` controls how many recent zip backups are retained locally and, when Google Drive OAuth is connected, in the Google Drive backup folder.
 
 ### Google Drive backup
 
