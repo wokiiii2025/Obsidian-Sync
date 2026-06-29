@@ -28,6 +28,14 @@ class Settings(BaseSettings):
             "read, book, article, paper, 阅读, 文章, 论文, 资料 => 阅读",
         ]
     )
+    admin_token: str = ""
+    admin_backup_enabled: bool = True
+    admin_backup_interval_hours: int = 24
+    admin_backup_directory: str = "/app/backups"
+    admin_backup_keep_local: int = 14
+    admin_backup_rclone_remote: str = ""
+    admin_backup_rclone_config: str = ""
+    admin_backup_timeout_seconds: int = 600
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

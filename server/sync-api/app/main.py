@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin import router as admin_router, run_backup_loop
 from app.config import get_settings
 from app.database import SessionLocal, engine, get_session
 from app.hermes_agent import run_hermes_agent_loop
@@ -46,6 +47,7 @@ from app.sync import VectorOrder, compare_vectors
 
 app = FastAPI(title="Obsidian Sync API", version="0.1.0")
 hermes_agent_task: asyncio.Task | None = None
+backup_task: asyncio.Task | None = None
 logger = logging.getLogger("obsidian-sync-api")
 app.add_middleware(
     CORSMiddleware,
@@ -53,11 +55,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(admin_router)
 
 
 @app.on_event("startup")
 async def migrate_schema() -> None:
-    global hermes_agent_task
+    global hermes_agent_task, backup_task
     async with engine.begin() as conn:
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
         await conn.execute(
@@ -88,6 +91,8 @@ async def migrate_schema() -> None:
         hermes_agent_task = asyncio.create_task(run_hermes_agent_loop(settings, SessionLocal))
     elif settings.hermes_agent_enabled:
         logger.warning("Hermes Agent enabled but HERMES_AGENT_VAULT_ID or HERMES_AGENT_VAULT_PASSWORD is missing.")
+    if settings.admin_backup_enabled:
+        backup_task = asyncio.create_task(run_backup_loop(settings))
 
 
 @app.on_event("shutdown")
@@ -96,6 +101,10 @@ async def stop_hermes_agent() -> None:
         hermes_agent_task.cancel()
         with suppress(asyncio.CancelledError):
             await hermes_agent_task
+    if backup_task:
+        backup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await backup_task
 
 
 @app.get("/health", response_model=HealthResponse)

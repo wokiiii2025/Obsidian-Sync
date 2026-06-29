@@ -11,6 +11,7 @@ Phase 1 implements the sync server described in `../Docs/obsidian-sync-design.md
 - API-key protected Hermes merge queue endpoint
 - Incremental sync log and version-vector conflict detection
 - Telegram intake service that receives Bot webhooks and queues messages for Hermes
+- Token-protected web admin panel with database statistics, Hermes queue visibility, and backups
 
 The server stores encrypted note payloads only. Clients are responsible for deriving keys and encrypting paths, content, and DEKs before upload.
 
@@ -42,6 +43,87 @@ Base URL: `/api/v1`
 - `POST /hermes/merge`
 - `GET /hermes/queue?status=pending&limit=20`
 - `POST /hermes/queue/{item_id}/complete`
+
+## Web admin panel
+
+The Sync API serves a lightweight admin panel at:
+
+```text
+GET /admin
+```
+
+Required environment:
+
+```bash
+ADMIN_TOKEN=<strong-random-token>
+```
+
+Open `/admin`, enter the admin token, and the panel can show:
+
+- vault, device, active file, deleted file, version, and sync-log counts;
+- Hermes queue counts and recent queue items;
+- local backup configuration and recent backup files;
+- a manual `Run backup now` action.
+
+The token is sent as the `X-Admin-Token` header for admin API requests. If `ADMIN_TOKEN` is empty, the admin API returns `503` so the panel cannot expose server data accidentally.
+
+## Database backups
+
+Backups run inside the `sync-api` container by using `pg_dump` against `DATABASE_URL`. The Docker image includes `postgresql-client` and `rclone`.
+
+Default environment:
+
+```bash
+ADMIN_BACKUP_ENABLED=true
+ADMIN_BACKUP_INTERVAL_HOURS=24
+ADMIN_BACKUP_DIRECTORY=/app/backups
+ADMIN_BACKUP_KEEP_LOCAL=14
+ADMIN_BACKUP_TIMEOUT_SECONDS=600
+```
+
+Compose mounts local backup files to:
+
+```text
+server/backups/
+```
+
+The backup file format is PostgreSQL custom dump (`*.dump`). To restore one manually:
+
+```bash
+pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" backups/obsidian-sync-YYYYMMDD-HHMMSS.dump
+```
+
+### Google Drive backup
+
+Google Drive backup is supported through `rclone`. This keeps Google OAuth credentials out of the application database and lets the same backup job target other storage providers later.
+
+Create the mounted config directory on the server:
+
+```bash
+mkdir -p /home/obsidian-server/rclone
+```
+
+Run rclone config interactively and create a remote named `gdrive`:
+
+```bash
+docker run --rm -it \
+  -v /home/obsidian-server/rclone:/config/rclone \
+  rclone/rclone config
+```
+
+Then set:
+
+```bash
+ADMIN_BACKUP_RCLONE_REMOTE=gdrive:obsidian-sync-backups
+```
+
+Restart the API service:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d sync-api
+```
+
+When `ADMIN_BACKUP_RCLONE_REMOTE` is configured, every successful local database backup is copied to the configured Google Drive folder.
 
 ## Telegram Bot intake
 
