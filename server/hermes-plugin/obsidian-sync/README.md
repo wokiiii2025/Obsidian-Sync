@@ -19,3 +19,17 @@ Tools:
 - `obsidian_append_note`
 - `obsidian_complete_queue`
 - `obsidian_fail_queue`
+
+## Queue worker
+
+`bin/process-queue.sh` runs Hermes in one-shot mode and asks it to process one pending queue item through the tools.
+
+Install the systemd units:
+
+```bash
+cp systemd/obsidian-hermes-queue.* /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now obsidian-hermes-queue.timer
+```
+
+Hermes must have a working inference provider before enabling the timer.

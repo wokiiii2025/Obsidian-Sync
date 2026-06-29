@@ -1,0 +1,9 @@
+[Unit]
+Description=Process one Obsidian Sync Hermes queue item
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/obsidian-server
+ExecStart=/root/.hermes/plugins/obsidian-sync/bin/process-queue.sh

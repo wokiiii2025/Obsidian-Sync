@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Obsidian Sync Hermes queue processor every minute
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+Unit=obsidian-hermes-queue.service
+
+[Install]
+WantedBy=timers.target
