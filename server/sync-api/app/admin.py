@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import shutil
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -114,7 +115,7 @@ async def list_backups(settings: Settings = Depends(get_settings)) -> dict:
     backup_dir = Path(settings.admin_backup_directory)
     files = []
     if backup_dir.exists():
-        for file in sorted(backup_dir.glob("*.dump"), key=lambda item: item.stat().st_mtime, reverse=True):
+        for file in sorted(backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True):
             stat = file.stat()
             files.append({"name": file.name, "size": stat.st_size, "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat()})
     return {"files": files, "last_backup": asdict(last_backup_result) if last_backup_result else None}
@@ -186,10 +187,13 @@ async def run_backup(settings: Settings) -> BackupResult:
         started = datetime.now(UTC)
         backup_dir = Path(settings.admin_backup_directory)
         backup_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"obsidian-sync-{started.strftime('%Y%m%d-%H%M%S')}.dump"
-        backup_path = backup_dir / filename
+        backup_name = f"obsidian-sync-{started.strftime('%Y%m%d-%H%M%S')}"
+        dump_path = backup_dir / f"{backup_name}.dump"
+        backup_path = backup_dir / f"{backup_name}.zip"
         try:
-            await pg_dump(settings, backup_path)
+            await pg_dump(settings, dump_path)
+            create_backup_archive(dump_path, backup_path, started)
+            dump_path.unlink(missing_ok=True)
             prune_local_backups(backup_dir, settings.admin_backup_keep_local)
             uploaded = False
             target = ""
@@ -221,6 +225,9 @@ async def run_backup(settings: Settings) -> BackupResult:
                 finished_at=datetime.now(UTC).isoformat(),
                 error=str(exc),
             )
+        finally:
+            if "dump_path" in locals():
+                dump_path.unlink(missing_ok=True)
         last_backup_result = result
         return result
 
@@ -282,9 +289,34 @@ async def run_command(command: list[str], env: dict[str, str] | None = None, tim
 def prune_local_backups(backup_dir: Path, keep: int) -> None:
     if keep <= 0:
         return
-    files = sorted(backup_dir.glob("*.dump"), key=lambda item: item.stat().st_mtime, reverse=True)
+    files = sorted(backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
     for file in files[keep:]:
         file.unlink(missing_ok=True)
+
+
+def create_backup_archive(dump_path: Path, archive_path: Path, created_at: datetime) -> None:
+    manifest = {
+        "app": "obsidian-sync",
+        "created_at": created_at.isoformat(),
+        "format": "postgresql-custom-dump",
+        "database_dump": "database.dump",
+        "restore": "pg_restore --clean --if-exists --no-owner --dbname \"$DATABASE_URL\" database.dump",
+    }
+    restore_readme = """# Obsidian Sync Backup Restore
+
+This archive contains a PostgreSQL custom-format dump.
+
+Restore:
+
+```bash
+unzip obsidian-sync-YYYYMMDD-HHMMSS.zip
+pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" database.dump
+```
+"""
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.write(dump_path, "database.dump")
+        archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr("README-restore.md", restore_readme)
 
 
 def backup_config_snapshot(settings: Settings) -> dict:
@@ -593,8 +625,8 @@ ADMIN_HTML = """
         ['Vaults', data.vaults], ['设备', data.devices], ['活跃文件', data.active_notes], ['历史版本', data.note_versions], ['同步日志', data.sync_logs], ['已删除', data.deleted_notes]
       ].map(([name, value]) => `<div class="card"><div class="muted">${name}</div><div class="metric">${value}</div></div>`).join('');
       const b = data.backup;
-      document.getElementById('backupConfig').innerHTML = `定时：<b class="${b.enabled ? 'ok' : 'bad'}">${b.enabled ? '开启' : '关闭'}</b>；间隔：${b.interval_hours}h；目录：<code>${b.directory}</code>；Google Drive/rclone：${b.rclone_remote_configured ? '<span class="ok">已配置</span>' : '<span class="bad">未配置</span>'}`;
       const g = data.google_drive;
+      document.getElementById('backupConfig').innerHTML = `定时：<b class="${b.enabled ? 'ok' : 'bad'}">${b.enabled ? '开启' : '关闭'}</b>；间隔：${b.interval_hours}h；目录：<code>${b.directory}</code>；Google Drive OAuth：${g.connected ? '<span class="ok">已连接</span>' : '<span class="bad">未连接</span>'}；rclone fallback：${b.rclone_remote_configured ? '<span class="ok">已配置</span>' : '<span class="bad">未配置</span>'}`;
       document.getElementById('googleDriveStatus').innerHTML = `OAuth：${g.configured ? '<span class="ok">已配置</span>' : '<span class="bad">未配置 Client</span>'}；连接：${g.connected ? '<span class="ok">已连接</span>' : '<span class="bad">未连接</span>'}；目录：<code>${g.folder_name}</code>`;
       document.getElementById('backupResult').textContent = data.last_backup ? JSON.stringify(data.last_backup) : '暂无备份记录';
       document.getElementById('hermesSummary').textContent = JSON.stringify(data.hermes_queue);

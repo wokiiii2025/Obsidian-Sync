@@ -1,16 +1,18 @@
 import os
 import time
+import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from app.admin import pg_dump, prune_local_backups
+from app.admin import create_backup_archive, pg_dump, prune_local_backups
 from app.admin import google_drive_status, sign_google_state, verify_google_state
 
 
 def test_prune_local_backups_keeps_newest_files(tmp_path: Path) -> None:
-    files = [tmp_path / f"backup-{index}.dump" for index in range(4)]
+    files = [tmp_path / f"backup-{index}.zip" for index in range(4)]
     for index, file in enumerate(files):
         file.write_text(str(index), encoding="utf-8")
         timestamp = time.time() + index
@@ -18,7 +20,20 @@ def test_prune_local_backups_keeps_newest_files(tmp_path: Path) -> None:
 
     prune_local_backups(tmp_path, keep=2)
 
-    assert sorted(file.name for file in tmp_path.glob("*.dump")) == ["backup-2.dump", "backup-3.dump"]
+    assert sorted(file.name for file in tmp_path.glob("*.zip")) == ["backup-2.zip", "backup-3.zip"]
+
+
+def test_create_backup_archive_contains_restore_assets(tmp_path: Path) -> None:
+    dump_path = tmp_path / "database.dump"
+    archive_path = tmp_path / "backup.zip"
+    dump_path.write_bytes(b"pg-dump")
+
+    create_backup_archive(dump_path, archive_path, datetime(2026, 6, 29, tzinfo=UTC))
+
+    with zipfile.ZipFile(archive_path) as archive:
+        assert sorted(archive.namelist()) == ["README-restore.md", "database.dump", "manifest.json"]
+        assert archive.read("database.dump") == b"pg-dump"
+        assert "pg_restore" in archive.read("README-restore.md").decode("utf-8")
 
 
 def test_google_state_roundtrip() -> None:
