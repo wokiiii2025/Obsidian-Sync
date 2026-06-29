@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         ]
     )
     admin_token: str = ""
-    admin_backup_enabled: bool = True
+    admin_backup_enabled: bool = False
     admin_backup_interval_hours: int = 24
     admin_backup_directory: str = "/app/backups"
     admin_backup_keep_local: int = 14

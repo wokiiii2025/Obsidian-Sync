@@ -27,7 +27,7 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - First-run confirmation before organizing existing attachments.
 - Confirmed orphan cleanup to the system trash.
 - Telegram Bot intake service for queuing channel/group messages into the Hermes queue, with server-side Hermes Agent automation for routing, merging, creating, and syncing notes.
-- Server web admin panel for sync statistics, Hermes queue visibility, manual backups, scheduled backups, and optional Google Drive backup upload through rclone.
+- Server web admin panel for sync statistics, Hermes queue visibility, manual backups, optional scheduled backups, and optional Google Drive backup upload through rclone.
 
 ## Attachment Management
 

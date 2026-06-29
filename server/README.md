@@ -74,7 +74,7 @@ Backups run inside the `sync-api` container by using `pg_dump` against `DATABASE
 Default environment:
 
 ```bash
-ADMIN_BACKUP_ENABLED=true
+ADMIN_BACKUP_ENABLED=false
 ADMIN_BACKUP_INTERVAL_HOURS=24
 ADMIN_BACKUP_DIRECTORY=/app/backups
 ADMIN_BACKUP_KEEP_LOCAL=14
@@ -93,9 +93,11 @@ The backup file format is PostgreSQL custom dump (`*.dump`). To restore one manu
 pg_restore --clean --if-exists --no-owner --dbname "$DATABASE_URL" backups/obsidian-sync-YYYYMMDD-HHMMSS.dump
 ```
 
+Manual backups are always available from the admin panel. `ADMIN_BACKUP_ENABLED=true` only controls the background scheduled backup loop. Leave it as `false` if backups should run only when an administrator clicks the button.
+
 ### Google Drive backup
 
-Google Drive backup is supported through `rclone`. This keeps Google OAuth credentials out of the application database and lets the same backup job target other storage providers later.
+Google Drive backup is supported through `rclone`. This still uses normal Google account login and OAuth authorization, but the credential is stored in the mounted rclone config file instead of the application database. When `ADMIN_BACKUP_RCLONE_REMOTE` is configured, every successful manual backup, and any scheduled backup if enabled, is copied to the configured Google Drive folder.
 
 Create the mounted config directory on the server:
 
