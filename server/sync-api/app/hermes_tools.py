@@ -184,9 +184,14 @@ async def fail_queue_item(
 
 async def find_note_by_path(session: AsyncSession, vault_id: uuid.UUID, kek: bytes, path: str) -> tuple[Note | None, str | None]:
     normalized = normalize_path(path)
-    notes = (await session.execute(select(Note).where(Note.vault_id == vault_id, Note.deleted_at.is_(None)))).scalars().all()
+    notes = (
+        await session.execute(select(Note).where(Note.vault_id == vault_id, Note.deleted_at.is_(None), Note.mime_type == "text/markdown"))
+    ).scalars().all()
     for note in notes:
-        note_path, content = decrypt_note(kek, note)
+        try:
+            note_path, content = decrypt_note(kek, note)
+        except UnicodeDecodeError:
+            continue
         if normalize_path(note_path) == normalized:
             return note, content
     return None, None
