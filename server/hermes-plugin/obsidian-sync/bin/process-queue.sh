@@ -69,6 +69,86 @@ def build_search_query(item):
     return text[:500]
 
 
+def github_repo_from_text(text):
+    match = re.search(r"https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:[/?#\s]|$)", text)
+    if not match:
+        return None
+    return match.group(1), match.group(2).removesuffix(".git")
+
+
+def http_json(url):
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "Obsidian-Sync-Hermes"},
+    )
+    with urllib.request.urlopen(request, timeout=25) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def http_text(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "Obsidian-Sync-Hermes"})
+    with urllib.request.urlopen(request, timeout=25) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def compact_markdown(markdown, limit=1800):
+    lines = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("!", "[![", "<p", "</p>", "<img", "<picture", "<source")):
+            continue
+        stripped = re.sub(r"<[^>]+>", "", stripped)
+        stripped = re.sub(r"!\[[^\]]*]\([^)]*\)", "", stripped)
+        stripped = re.sub(r"\[([^\]]+)]\([^)]*\)", r"\1", stripped)
+        lines.append(stripped)
+        if sum(len(item) for item in lines) >= limit:
+            break
+    return "\n".join(lines)[:limit].rstrip()
+
+
+def fetch_readme(owner, repo, branch):
+    for filename in ("README.md", "readme.md", "README.rst", "README.MD"):
+        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{filename}"
+        try:
+            text = http_text(url)
+        except Exception:
+            continue
+        if text.strip():
+            return compact_markdown(text)
+    return ""
+
+
+def fetch_github_context(item):
+    text = " ".join(str(item.get(key) or "") for key in ("target_note_path", "merge_content", "source_url"))
+    repo_match = github_repo_from_text(text)
+    if not repo_match:
+        return None
+    owner, repo = repo_match
+    repo_data = http_json(f"https://api.github.com/repos/{owner}/{repo}")
+    branch = repo_data.get("default_branch") or "main"
+    return {
+        "owner": owner,
+        "repo": repo,
+        "full_name": repo_data.get("full_name") or f"{owner}/{repo}",
+        "url": repo_data.get("html_url") or f"https://github.com/{owner}/{repo}",
+        "description": repo_data.get("description") or "",
+        "language": repo_data.get("language") or "",
+        "stars": repo_data.get("stargazers_count") or 0,
+        "forks": repo_data.get("forks_count") or 0,
+        "open_issues": repo_data.get("open_issues_count") or 0,
+        "license": (repo_data.get("license") or {}).get("name") or "",
+        "topics": repo_data.get("topics") or [],
+        "homepage": repo_data.get("homepage") or "",
+        "default_branch": branch,
+        "updated_at": repo_data.get("updated_at") or "",
+        "created_at": repo_data.get("created_at") or "",
+        "archived": bool(repo_data.get("archived")),
+        "readme_excerpt": fetch_readme(owner, repo, branch),
+    }
+
+
 def extract_json(text):
     text = text.strip()
     if text.startswith("{") and text.endswith("}"):
@@ -83,7 +163,7 @@ def extract_json(text):
     raise ValueError("Hermes did not return JSON")
 
 
-def ask_hermes(item, candidates):
+def ask_hermes(item, candidates, github_context):
     prompt = f"""\
 You are the server-side Hermes automation for an Obsidian vault.
 
@@ -103,7 +183,8 @@ Rules:
 - Prefer append when a candidate note is clearly related.
 - Create a new note when the item is a distinct topic or project.
 - For GitHub repository links, use a concise project note under Git开源项目/<repo-name>.md unless a better matching candidate already exists.
-- Keep GitHub project notes compact: title, URL, what it is, why it matters, possible use, tags/source.
+- If GitHub context is provided, use it as factual source material. Do not write "待进一步查看 README", "后续补充", or vague guesses.
+- Keep GitHub project notes useful but not verbose: title, URL, description, tech stack, key features, architecture, deployment hints, why it is worth tracking, and source.
 - Do not merge unrelated projects into an existing note.
 - Never include secrets.
 
@@ -112,6 +193,9 @@ Queue item:
 
 Candidate notes:
 {json.dumps(candidates, ensure_ascii=False)}
+
+GitHub context:
+{json.dumps(github_context, ensure_ascii=False)}
 """
     process = subprocess.run(
         [HERMES_BIN, "--yolo", "-z", prompt],
@@ -166,7 +250,8 @@ if not item:
 item_id = item["id"]
 try:
     search = api("GET", "/api/v1/hermes/tools/notes/search", query={"query": build_search_query(item), "limit": "8"})
-    decision = ask_hermes(item, search.get("notes", []))
+    github_context = fetch_github_context(item)
+    decision = ask_hermes(item, search.get("notes", []), github_context)
     result = write_note(decision)
     complete(item_id)
     print(f"processed queue item {item_id}: {result.get('operation')} {result.get('path')}")
