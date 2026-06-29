@@ -152,6 +152,10 @@ When an update is installed, the plugin downloads and replaces:
 
 Reload Obsidian after installing an update. The updater does not run `git pull`; it works through GitHub raw file downloads so it can run inside the Obsidian plugin sandbox.
 
+## Hermes and Telegram
+
+Telegram intake and Hermes routing are handled by the server-side Hermes Agent. The Obsidian plugin does not poll or consume the Hermes queue; it only syncs the encrypted notes that the server writes.
+
 ## Notes
 
 - The plugin encrypts note paths and contents locally before upload.

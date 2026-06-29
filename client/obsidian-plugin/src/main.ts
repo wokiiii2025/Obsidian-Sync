@@ -92,14 +92,6 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       }
     });
     this.addCommand({
-      id: "zero-knowledge-sync-import-telegram-queue",
-      name: t(this.settings.language, "settings.telegram.import.name"),
-      callback: () => {
-        new Notice(t(this.settings.language, "notice.actionStarted", { action: t(this.settings.language, "settings.telegram.import.button") }));
-        this.importTelegramQueue().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
-      }
-    });
-    this.addCommand({
       id: "zero-knowledge-sync-check-update",
       name: t(this.settings.language, "settings.updates.check.name"),
       callback: () => {
@@ -109,7 +101,6 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     });
     this.registerFileWatchers();
     this.configureInterval();
-    this.configureHermesAgent();
     const initialAttachmentTimer = window.setTimeout(() => {
       this.promptInitialAttachmentOrganization().catch((error) => new Notice(t(this.settings.language, "notice.prefix", { message: error.message })));
     }, 1500);
@@ -147,12 +138,15 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
       this.settings.attachmentDateFormat = DEFAULT_SETTINGS.attachmentDateFormat;
       await this.saveData(this.settings);
     }
+    if (this.settings.hermesAgentEnabled) {
+      this.settings.hermesAgentEnabled = false;
+      await this.saveData(this.settings);
+    }
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.configureInterval();
-    this.configureHermesAgent();
     this.updateStatusBar();
   }
 
@@ -1413,7 +1407,6 @@ class SyncSettingTab extends PluginSettingTab {
       ["sync", "settings.tabs.sync"],
       ["files", "settings.tabs.files"],
       ["attachments", "settings.tabs.attachments"],
-      ["hermes", "settings.tabs.hermes"],
       ["updates", "settings.tabs.updates"],
       ["status", "settings.tabs.status"],
       ["devices", "settings.tabs.devices"]

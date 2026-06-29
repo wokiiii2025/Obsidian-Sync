@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
   autoSyncDebounceSeconds: 60,
-  hermesAgentEnabled: true,
+  hermesAgentEnabled: false,
   hermesAgentIntervalSeconds: 60,
   hermesAgentInboxPath: "Inbox/Telegram.md",
   hermesAgentCreateFolder: "Inbox/Hermes",
