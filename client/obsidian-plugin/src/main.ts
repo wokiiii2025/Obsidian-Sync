@@ -4,6 +4,7 @@ import { CryptoService } from "./crypto";
 import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
 import { isManagedAttachmentExtension, isPathSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
+import { canUseSecureStorage, protectText, unprotectText } from "./secure-storage";
 import { SyncEngine } from "./sync-engine";
 import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
 
@@ -35,6 +36,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    await this.restoreSavedUnlockKey();
     this.registerExtensions(["json"], "markdown");
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("zk-sync-status");
@@ -152,8 +154,26 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async unlock(password: string): Promise<void> {
     await this.crypto.unlock(password);
+    await this.saveUnlockKeyIfRemembered();
     new Notice(t(this.settings.language, "notice.unlocked"));
     this.updateStatusBar();
+  }
+
+  async forgetSavedUnlockKey(): Promise<void> {
+    this.settings.rememberUnlockKey = false;
+    this.settings.savedUnlockKey = "";
+    await this.saveSettings();
+    new Notice(t(this.settings.language, "notice.savedUnlockForgotten"));
+  }
+
+  async rememberCurrentUnlockKey(): Promise<void> {
+    if (!this.crypto.isUnlocked()) {
+      await this.saveSettings();
+      return;
+    }
+    if (await this.saveUnlockKeyIfRemembered()) {
+      new Notice(t(this.settings.language, "notice.savedUnlockStored"));
+    }
   }
 
   async scanOrphanAttachments(): Promise<string[]> {
@@ -464,6 +484,43 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     this.intervalId = window.setInterval(() => {
       this.syncNow().catch((error) => new Notice(t(this.settings.language, "notice.syncFailed", { message: error.message })));
     }, seconds * 1000);
+  }
+
+  private async restoreSavedUnlockKey(): Promise<void> {
+    if (!this.settings.rememberUnlockKey || !this.settings.savedUnlockKey) {
+      return;
+    }
+    const encodedKek = unprotectText(this.settings.savedUnlockKey);
+    if (!encodedKek) {
+      this.settings.savedUnlockKey = "";
+      await this.saveData(this.settings);
+      return;
+    }
+    try {
+      this.crypto.unlockWithKek(encodedKek);
+      this.settings.lastSyncStatus = "idle";
+      await this.saveData(this.settings);
+    } catch {
+      this.settings.savedUnlockKey = "";
+      await this.saveData(this.settings);
+    }
+  }
+
+  private async saveUnlockKeyIfRemembered(): Promise<boolean> {
+    if (!this.settings.rememberUnlockKey) {
+      return false;
+    }
+    const protectedKek = protectText(this.crypto.exportKek());
+    if (!protectedKek) {
+      this.settings.rememberUnlockKey = false;
+      this.settings.savedUnlockKey = "";
+      await this.saveSettings();
+      new Notice(t(this.settings.language, "notice.secureStorageUnavailable"));
+      return false;
+    }
+    this.settings.savedUnlockKey = protectedKek;
+    await this.saveSettings();
+    return true;
   }
 
   private configureHermesAgent(): void {
@@ -870,6 +927,50 @@ class SyncSettingTab extends PluginSettingTab {
       .setDesc(t(language, "settings.unlock.desc"))
       .addButton((button) =>
         this.bindActionButton(button.setButtonText(t(language, "settings.unlock.button")), t(language, "settings.unlock.button"), async () => this.withPassword(() => this.plugin.unlock(this.password)))
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.rememberUnlock.name"))
+      .setDesc(t(language, "settings.rememberUnlock.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.rememberUnlockKey)
+          .onChange(async (value) => {
+            if (value && !canUseSecureStorage()) {
+              this.plugin.settings.rememberUnlockKey = false;
+              this.plugin.settings.savedUnlockKey = "";
+              await this.plugin.saveSettings();
+              new Notice(t(language, "notice.secureStorageUnavailable"));
+              this.display();
+              return;
+            }
+            this.plugin.settings.rememberUnlockKey = value;
+            if (!value) {
+              this.plugin.settings.savedUnlockKey = "";
+            } else if (this.plugin.crypto.isUnlocked()) {
+              await this.plugin.rememberCurrentUnlockKey();
+              this.display();
+              return;
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.forgetUnlock.name"))
+      .setDesc(t(language, "settings.forgetUnlock.desc", { status: this.plugin.settings.savedUnlockKey ? t(language, "settings.forgetUnlock.saved") : t(language, "settings.forgetUnlock.empty") }))
+      .addButton((button) =>
+        this.bindActionButton(
+          button
+            .setButtonText(t(language, "settings.forgetUnlock.button"))
+            .setDisabled(!this.plugin.settings.savedUnlockKey),
+          t(language, "settings.forgetUnlock.button"),
+          async () => {
+            await this.plugin.forgetSavedUnlockKey();
+            this.display();
+          }
+        )
       );
     }
 

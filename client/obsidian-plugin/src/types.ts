@@ -29,6 +29,8 @@ export interface PluginSettings {
   vaultId: string;
   deviceId: string;
   token: string;
+  rememberUnlockKey: boolean;
+  savedUnlockKey: string;
   syncMode: SyncMode;
   syncIntervalSeconds: number;
   autoSyncOnChange: boolean;

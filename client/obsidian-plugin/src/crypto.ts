@@ -31,6 +31,18 @@ export class CryptoService {
     return this.kek !== null;
   }
 
+  unlockWithKek(encodedKek: string): void {
+    const kek = base64ToBytes(encodedKek);
+    if (kek.length !== KEY_LENGTH) {
+      throw new Error("Saved unlock key is invalid");
+    }
+    this.kek = kek;
+  }
+
+  exportKek(): string {
+    return bytesToBase64(this.requireKek());
+  }
+
   lock(): void {
     this.kek = null;
   }

@@ -6,6 +6,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   vaultId: "",
   deviceId: "",
   token: "",
+  rememberUnlockKey: false,
+  savedUnlockKey: "",
   syncMode: "manual",
   syncIntervalSeconds: 30,
   autoSyncOnChange: true,
