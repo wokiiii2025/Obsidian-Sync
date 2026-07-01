@@ -1,6 +1,6 @@
 {
   "name": "obsidian-zero-knowledge-sync",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "End-to-end encrypted Obsidian sync plugin.",
   "main": "main.js",
