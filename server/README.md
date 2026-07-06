@@ -8,6 +8,7 @@ Phase 1 implements the sync server described in `../Docs/obsidian-sync-design.md
 - PostgreSQL schema in `init.sql`
 - Docker Compose deployment with PostgreSQL, API, and Nginx
 - JWT authentication for Obsidian clients
+- Stable client instance IDs for reusing device records across repeated logins
 - API-key protected Hermes merge queue endpoint
 - Incremental sync log and version-vector conflict detection
 - Telegram intake service that receives Bot webhooks and queues messages for Hermes
@@ -37,7 +38,7 @@ Base URL: `/api/v1`
 
 - `POST /auth/register`
 - `POST /auth/login`
-- `GET /sync/changes?since=<ISO timestamp>&limit=100`
+- `GET /sync/changes?since=<ISO timestamp>&until=<checkpoint>&cursor=<sync_log_id>&limit=100`
 - `POST /sync/push`
 - `POST /sync/resolve`
 - `POST /hermes/merge`

@@ -19,6 +19,7 @@ Self-hosted Obsidian sync with a FastAPI/PostgreSQL server and an Obsidian deskt
 - Encrypted version history with restore for the active file.
 - Tracked conflict copies with open/restore actions.
 - Device list and revoke-device support.
+- Stable client instance IDs so repeated login from the same install reuses the same server device record.
 - File-type selective sync.
 - English and Chinese UI.
 - Configurable attachment management with automatic link rewriting.

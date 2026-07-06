@@ -8,6 +8,7 @@ import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
 const MAX_SYNC_HISTORY = 20;
+const REMOTE_CHANGE_PAGE_SIZE = 500;
 
 interface LocalSyncFile {
   path: string;
@@ -51,9 +52,9 @@ export class SyncEngine {
     await this.saveSettings();
     try {
       const state = await loadSyncState(this.vault);
-      await this.applyRemoteChanges(state);
+      const checkpoint = await this.applyRemoteChanges(state);
       await this.pushLocalChanges(state);
-      this.settings.lastSync = new Date().toISOString();
+      this.settings.lastSync = checkpoint || new Date().toISOString();
       this.settings.lastSyncStatus = "success";
       this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length;
       this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
@@ -78,18 +79,33 @@ export class SyncEngine {
     }
   }
 
-  private async applyRemoteChanges(state: SyncState): Promise<void> {
-    const changes = await this.api.changes(this.settings.lastSync);
-    this.settings.lastSyncStats.downloaded = changes.length;
-    for (const change of changes) {
-      if (!change.path_hash) {
-        continue;
+  private async applyRemoteChanges(state: SyncState): Promise<string> {
+    let cursor: number | undefined;
+    let checkpoint = "";
+    let downloaded = 0;
+    for (;;) {
+      const page = await this.api.changes(this.settings.lastSync, {
+        limit: REMOTE_CHANGE_PAGE_SIZE,
+        cursor,
+        checkpoint: checkpoint || undefined
+      });
+      checkpoint = checkpoint || page.checkpoint;
+      downloaded += page.changes.length;
+      this.settings.lastSyncStats.downloaded = downloaded;
+      for (const change of page.changes) {
+        if (!change.path_hash) {
+          continue;
+        }
+        if (change.operation === "delete") {
+          await this.applyRemoteDelete(change, state);
+        } else {
+          await this.applyRemoteUpsert(change, state);
+        }
       }
-      if (change.operation === "delete") {
-        await this.applyRemoteDelete(change, state);
-      } else {
-        await this.applyRemoteUpsert(change, state);
+      if (!page.has_more || page.next_cursor === null) {
+        return checkpoint;
       }
+      cursor = page.next_cursor;
     }
   }
 
@@ -101,32 +117,11 @@ export class SyncEngine {
     if (!isPathSyncEnabled(decrypted.path, extensionForPath(decrypted.path), this.settings)) {
       return;
     }
-    const existing = this.vault.getAbstractFileByPath(decrypted.path);
-    if (existing && "extension" in existing) {
-      await this.vault.modifyBinary(existing as TFile, decrypted.content.buffer as ArrayBuffer);
-      state.notes[decrypted.path] = {
-        pathHash: change.path_hash,
-        versionVector: change.version_vector,
-        modifiedTime: (existing as TFile).stat.mtime
-      };
-      return;
-    }
-    await this.ensureParentFolder(decrypted.path);
-    if (this.isDotObsidianPath(decrypted.path)) {
-      await this.vault.adapter.writeBinary(decrypted.path, decrypted.content.buffer as ArrayBuffer);
-      const stat = await this.vault.adapter.stat(decrypted.path);
-      state.notes[decrypted.path] = {
-        pathHash: change.path_hash,
-        versionVector: change.version_vector,
-        modifiedTime: stat?.mtime ?? Date.now()
-      };
-      return;
-    }
-    const created = await this.vault.createBinary(decrypted.path, decrypted.content.buffer as ArrayBuffer);
+    const modifiedTime = await this.writeRemoteFile(decrypted.path, decrypted.content);
     state.notes[decrypted.path] = {
       pathHash: change.path_hash,
       versionVector: change.version_vector,
-      modifiedTime: created.stat.mtime
+      modifiedTime
     };
   }
 
@@ -213,7 +208,7 @@ export class SyncEngine {
       const remote = await this.crypto.decryptRemoteFile(conflict.path_hash, conflict.encrypted_path, conflict.encrypted_content, conflict.encrypted_dek);
       const conflictPath = `${CONFLICT_DIR}/${remote.path.replace(/[\\/]/g, "-")}-${Date.now()}`;
       await this.ensureParentFolder(conflictPath);
-      await this.vault.createBinary(conflictPath, remote.content.buffer as ArrayBuffer);
+      await this.vault.createBinary(conflictPath, toExactArrayBuffer(remote.content));
       this.settings.conflictRecords = [
         {
           originalPath: remote.path,
@@ -262,6 +257,24 @@ export class SyncEngine {
         await this.vault.createFolder(current);
       }
     }
+  }
+
+  private async writeRemoteFile(path: string, content: Uint8Array): Promise<number> {
+    await this.ensureParentFolder(path);
+    const buffer = toExactArrayBuffer(content);
+    const existing = this.vault.getAbstractFileByPath(path);
+    if (existing && "extension" in existing) {
+      await this.vault.modifyBinary(existing as TFile, buffer);
+      const stat = await this.vault.adapter.stat(path);
+      return stat?.mtime ?? (existing as TFile).stat.mtime;
+    }
+    if (this.isDotObsidianPath(path) || await this.vault.adapter.exists(path)) {
+      await this.vault.adapter.writeBinary(path, buffer);
+      const stat = await this.vault.adapter.stat(path);
+      return stat?.mtime ?? Date.now();
+    }
+    const created = await this.vault.createBinary(path, buffer);
+    return created.stat.mtime;
   }
 
   private async listLocalSyncFiles(): Promise<LocalSyncFile[]> {
@@ -339,4 +352,11 @@ function mimeTypeForPath(path: string): string {
     mov: "video/quicktime"
   };
   return types[extension] ?? "application/octet-stream";
+}
+
+function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
+    return bytes.buffer as ArrayBuffer;
+  }
+  return bytes.slice().buffer as ArrayBuffer;
 }

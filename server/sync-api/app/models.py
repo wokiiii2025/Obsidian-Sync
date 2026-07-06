@@ -26,6 +26,7 @@ class Device(Base):
     vault_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vaults.id", ondelete="CASCADE"))
     device_name: Mapped[str | None] = mapped_column(Text)
     platform: Mapped[str | None] = mapped_column(Text)
+    client_instance_id: Mapped[str | None] = mapped_column(Text)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

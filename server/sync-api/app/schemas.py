@@ -28,6 +28,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8)
     device_name: str | None = None
     platform: str | None = None
+    client_instance_id: str | None = Field(default=None, max_length=200)
 
 
 class RegisterResponse(BaseModel):
@@ -41,6 +42,7 @@ class LoginRequest(BaseModel):
     password: str
     device_name: str | None = None
     platform: str | None = None
+    client_instance_id: str | None = Field(default=None, max_length=200)
 
 
 class LoginResponse(BaseModel):
@@ -100,6 +102,9 @@ class RemoteChange(BaseModel):
 
 class ChangesResponse(BaseModel):
     changes: list[RemoteChange]
+    next_cursor: int | None = None
+    has_more: bool = False
+    checkpoint: datetime
 
 
 class ResolveRequest(BaseModel):

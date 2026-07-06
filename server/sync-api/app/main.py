@@ -65,6 +65,16 @@ async def migrate_schema() -> None:
     global hermes_agent_task, backup_task
     async with engine.begin() as conn:
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
+        await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS client_instance_id TEXT"))
+        await conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS idx_devices_vault_client_instance
+                ON devices(vault_id, client_instance_id)
+                WHERE client_instance_id IS NOT NULL AND revoked_at IS NULL
+                """
+            )
+        )
         await conn.execute(
             text(
                 """
@@ -114,14 +124,112 @@ async def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+def _normalize_client_instance_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _device_identity_key(device: Device) -> str:
+    if device.client_instance_id:
+        return f"client:{device.client_instance_id}"
+    if device.device_name or device.platform:
+        return f"legacy:{device.platform or ''}:{device.device_name or ''}"
+    return f"id:{device.id}"
+
+
+def _deduplicate_active_devices(devices: list[Device], current_device_id: uuid.UUID | None = None) -> list[Device]:
+    seen: set[str] = set()
+    selected: dict[str, Device] = {}
+    visible: list[Device] = []
+    for device in devices:
+        if device.revoked_at is not None:
+            continue
+        key = _device_identity_key(device)
+        if key in seen:
+            if current_device_id is not None and device.id == current_device_id:
+                selected[key] = device
+            continue
+        seen.add(key)
+        selected[key] = device
+        visible.append(device)
+    return [selected[_device_identity_key(device)] for device in visible]
+
+
+async def _get_or_create_device(
+    session: AsyncSession,
+    vault_id: uuid.UUID,
+    device_name: str | None,
+    platform: str | None,
+    client_instance_id: str | None,
+) -> Device:
+    now = datetime.now(UTC)
+    normalized_client_id = _normalize_client_instance_id(client_instance_id)
+    device: Device | None = None
+    if normalized_client_id:
+        device = (
+            await session.execute(
+                select(Device)
+                .where(Device.vault_id == vault_id)
+                .where(Device.client_instance_id == normalized_client_id)
+                .where(Device.revoked_at.is_(None))
+                .order_by(Device.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    if device is None:
+        device = Device(
+            vault_id=vault_id,
+            device_name=device_name,
+            platform=platform,
+            client_instance_id=normalized_client_id,
+            last_seen=now,
+        )
+        session.add(device)
+        await session.flush()
+    else:
+        device.device_name = device_name
+        device.platform = platform
+        device.last_seen = now
+
+    await _revoke_duplicate_devices(session, device, now)
+    return device
+
+
+async def _revoke_duplicate_devices(session: AsyncSession, active_device: Device, revoked_at: datetime) -> None:
+    query = (
+        select(Device)
+        .where(Device.vault_id == active_device.vault_id)
+        .where(Device.id != active_device.id)
+        .where(Device.revoked_at.is_(None))
+    )
+    if active_device.client_instance_id:
+        query = query.where(
+            (Device.client_instance_id == active_device.client_instance_id)
+            | (
+                (Device.client_instance_id.is_(None))
+                & (Device.device_name == active_device.device_name)
+                & (Device.platform == active_device.platform)
+            )
+        )
+    elif active_device.device_name or active_device.platform:
+        query = query.where(Device.device_name == active_device.device_name).where(Device.platform == active_device.platform)
+    else:
+        return
+    duplicates = (await session.execute(query)).scalars().all()
+    for duplicate in duplicates:
+        duplicate.revoked_at = revoked_at
+
+
 @app.post("/api/v1/auth/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, session: AsyncSession = Depends(get_session)) -> RegisterResponse:
     vault = Vault(name=payload.vault_name, password_hash=hash_password(payload.password))
     session.add(vault)
     await session.flush()
 
-    device = Device(vault_id=vault.id, device_name=payload.device_name, platform=payload.platform, last_seen=datetime.now(UTC))
-    session.add(device)
+    device = await _get_or_create_device(session, vault.id, payload.device_name, payload.platform, payload.client_instance_id)
     await session.commit()
 
     return RegisterResponse(vault_id=vault.id, device_id=device.id, token=create_token(vault.id, device.id))
@@ -133,8 +241,7 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_sessi
     if vault is None or not verify_password(payload.password, vault.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid vault credentials")
 
-    device = Device(vault_id=vault.id, device_name=payload.device_name, platform=payload.platform, last_seen=datetime.now(UTC))
-    session.add(device)
+    device = await _get_or_create_device(session, vault.id, payload.device_name, payload.platform, payload.client_instance_id)
     await session.commit()
 
     return LoginResponse(token=create_token(vault.id, device.id), device_id=device.id)
@@ -144,23 +251,31 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_sessi
 async def changes(
     auth: Annotated[tuple, Depends(current_auth)],
     since: datetime | None = Query(default=None),
+    until: datetime | None = Query(default=None),
+    cursor: int | None = Query(default=None, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> ChangesResponse:
     vault_id, device_id, session = auth
+    checkpoint = until or datetime.now(UTC)
     query = (
         select(SyncLog, Note)
         .join(Note, SyncLog.note_id == Note.id, isouter=True)
         .where(SyncLog.vault_id == vault_id)
         .where((SyncLog.device_id.is_(None)) | (SyncLog.device_id != device_id))
-        .order_by(SyncLog.synced_at.asc(), SyncLog.id.asc())
-        .limit(limit)
+        .where(SyncLog.synced_at <= checkpoint)
+        .order_by(SyncLog.id.asc())
+        .limit(limit + 1)
     )
     if since is not None:
         query = query.where(SyncLog.synced_at > since)
+    if cursor is not None:
+        query = query.where(SyncLog.id > cursor)
 
     rows = (await session.execute(query)).all()
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
     remote_changes = []
-    for log, note in rows:
+    for log, note in page_rows:
         remote_changes.append(
             RemoteChange(
                 note_id=log.note_id,
@@ -173,7 +288,12 @@ async def changes(
                 modified_at=log.synced_at,
             )
         )
-    return ChangesResponse(changes=remote_changes)
+    return ChangesResponse(
+        changes=remote_changes,
+        next_cursor=page_rows[-1][0].id if has_more and page_rows else None,
+        has_more=has_more,
+        checkpoint=checkpoint,
+    )
 
 
 @app.post("/api/v1/sync/push", response_model=PushResponse)
@@ -374,10 +494,11 @@ async def restore_version(version_id: int, auth: Annotated[tuple, Depends(curren
 
 
 @app.get("/api/v1/devices", response_model=DevicesResponse)
-async def list_devices(auth: Annotated[tuple, Depends(current_auth)]) -> DevicesResponse:
+async def list_devices(auth: Annotated[tuple, Depends(current_auth)], include_revoked: bool = Query(default=False)) -> DevicesResponse:
     vault_id, device_id, session = auth
     query = select(Device).where(Device.vault_id == vault_id).order_by(Device.created_at.desc())
     devices = (await session.execute(query)).scalars().all()
+    visible_devices = devices if include_revoked else _deduplicate_active_devices(devices, device_id)
     return DevicesResponse(
         devices=[
             DeviceInfo(
@@ -389,7 +510,7 @@ async def list_devices(auth: Annotated[tuple, Depends(current_auth)]) -> Devices
                 revoked_at=device.revoked_at,
                 current=device.id == device_id,
             )
-            for device in devices
+            for device in visible_devices
         ]
     )
 

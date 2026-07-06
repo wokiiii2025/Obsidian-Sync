@@ -28,6 +28,7 @@ export interface PluginSettings {
   serverUrl: string;
   vaultId: string;
   deviceId: string;
+  clientInstanceId: string;
   token: string;
   rememberUnlockKey: boolean;
   savedUnlockKey: string;
@@ -105,6 +106,13 @@ export interface RemoteChange {
   version_vector: Record<string, number> | null;
   operation: "create" | "update" | "delete";
   modified_at: string;
+}
+
+export interface ChangesPage {
+  changes: RemoteChange[];
+  next_cursor: number | null;
+  has_more: boolean;
+  checkpoint: string;
 }
 
 export interface ConflictChange {

@@ -12,12 +12,17 @@ CREATE TABLE IF NOT EXISTS devices (
     vault_id UUID NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
     device_name TEXT,
     platform TEXT,
+    client_instance_id TEXT,
     last_seen TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS client_instance_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_devices_vault_client_instance
+    ON devices(vault_id, client_instance_id)
+    WHERE client_instance_id IS NOT NULL AND revoked_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

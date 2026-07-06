@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   serverUrl: "http://127.0.0.1:8080",
   vaultId: "",
   deviceId: "",
+  clientInstanceId: "",
   token: "",
   rememberUnlockKey: false,
   savedUnlockKey: "",

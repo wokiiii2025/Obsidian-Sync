@@ -132,16 +132,24 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    let changed = false;
+    if (!this.settings.clientInstanceId) {
+      this.settings.clientInstanceId = generateClientInstanceId();
+      changed = true;
+    }
     if (this.settings.exclusions === LEGACY_DEFAULT_EXCLUSIONS) {
       this.settings.exclusions = DEFAULT_SETTINGS.exclusions;
-      await this.saveData(this.settings);
+      changed = true;
     }
     if (this.settings.attachmentDateFormat === LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT) {
       this.settings.attachmentDateFormat = DEFAULT_SETTINGS.attachmentDateFormat;
-      await this.saveData(this.settings);
+      changed = true;
     }
     if (this.settings.hermesAgentEnabled) {
       this.settings.hermesAgentEnabled = false;
+      changed = true;
+    }
+    if (changed) {
       await this.saveData(this.settings);
     }
   }
@@ -383,6 +391,8 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     const content = await this.app.vault.readBinary(conflict);
     if (existing instanceof TFile) {
       await this.app.vault.modifyBinary(existing, content);
+    } else if (await this.app.vault.adapter.exists(record.originalPath)) {
+      await this.app.vault.adapter.writeBinary(record.originalPath, content);
     } else {
       await this.app.vault.createBinary(record.originalPath, content);
     }
@@ -1537,7 +1547,7 @@ class SyncSettingTab extends PluginSettingTab {
 
   private async register(): Promise<void> {
     await this.withPassword(async () => {
-      const response = await this.plugin.api.register(this.app.vault.getName(), this.password, this.deviceName(), this.platform());
+      const response = await this.plugin.api.register(this.app.vault.getName(), this.password, this.deviceName(), this.platform(), this.plugin.settings.clientInstanceId);
       this.plugin.settings.vaultId = response.vault_id;
       this.plugin.settings.deviceId = response.device_id;
       this.plugin.settings.token = response.token;
@@ -1567,7 +1577,7 @@ class SyncSettingTab extends PluginSettingTab {
       if (!this.plugin.settings.vaultId) {
         throw new Error(t(this.plugin.settings.language, "error.vaultIdRequired"));
       }
-      const response = await this.plugin.api.login(this.plugin.settings.vaultId, this.password, this.deviceName(), this.platform());
+      const response = await this.plugin.api.login(this.plugin.settings.vaultId, this.password, this.deviceName(), this.platform(), this.plugin.settings.clientInstanceId);
       this.plugin.settings.deviceId = response.device_id;
       this.plugin.settings.token = response.token;
       await this.plugin.unlock(this.password);
@@ -2026,6 +2036,25 @@ function isNewerVersion(remote: string, current: string): boolean {
     }
   }
   return false;
+}
+
+function generateClientInstanceId(): string {
+  const crypto = globalThis.crypto;
+  if (crypto && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (crypto && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function versionParts(version: string): number[] {
