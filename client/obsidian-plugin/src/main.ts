@@ -752,7 +752,7 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     let current = "";
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
-      if (!this.app.vault.getAbstractFileByPath(current)) {
+      if (!this.app.vault.getAbstractFileByPath(current) && !(await this.app.vault.adapter.exists(current))) {
         await this.app.vault.createFolder(current);
       }
     }
@@ -782,13 +782,23 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   private isExcludedPath(path: string): boolean {
+    if (this.isAppleDoublePath(path)) {
+      return true;
+    }
     const patterns = [...PROTECTED_EXCLUSIONS, ...this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
     return patterns.some((pattern) => {
       if (pattern.endsWith("/**")) {
         return path.startsWith(pattern.slice(0, -3));
       }
+      if (pattern === "._*" || pattern === "**/._*") {
+        return this.isAppleDoublePath(path);
+      }
       return path === pattern || path.startsWith(`${pattern}/`);
     });
+  }
+
+  private isAppleDoublePath(path: string): boolean {
+    return path.split("/").some((part) => part.startsWith("._"));
   }
 
   private updateStatusBar(): void {

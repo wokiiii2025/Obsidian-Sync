@@ -229,13 +229,23 @@ export class SyncEngine {
   }
 
   private isExcluded(path: string): boolean {
+    if (this.isAppleDoublePath(path)) {
+      return true;
+    }
     const patterns = [...PROTECTED_EXCLUSIONS, ...this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
     return patterns.some((pattern) => {
       if (pattern.endsWith("/**")) {
         return path.startsWith(pattern.slice(0, -3));
       }
+      if (pattern === "._*" || pattern === "**/._*") {
+        return this.isAppleDoublePath(path);
+      }
       return path === pattern || path.startsWith(`${pattern}/`);
     });
+  }
+
+  private isAppleDoublePath(path: string): boolean {
+    return path.split("/").some((part) => part.startsWith("._"));
   }
 
   private async ensureParentFolder(path: string): Promise<void> {
@@ -248,7 +258,7 @@ export class SyncEngine {
         if (!(await this.vault.adapter.exists(current))) {
           await this.vault.adapter.mkdir(current);
         }
-      } else if (!this.vault.getAbstractFileByPath(current)) {
+      } else if (!this.vault.getAbstractFileByPath(current) && !(await this.vault.adapter.exists(current))) {
         await this.vault.createFolder(current);
       }
     }
