@@ -4,6 +4,7 @@ import { CryptoService } from "./crypto";
 import { CONFLICT_DIR, DEFAULT_SETTINGS, LEGACY_DEFAULT_ATTACHMENT_DATE_FORMAT, LEGACY_DEFAULT_EXCLUSIONS, PROTECTED_EXCLUSIONS } from "./defaults";
 import { isManagedAttachmentExtension, isPathSyncEnabled } from "./file-policy";
 import { t } from "./i18n";
+import { applyVaultIdInput } from "./settings-auth";
 import { canUseSecureStorage, protectText, unprotectText } from "./secure-storage";
 import { SyncEngine } from "./sync-engine";
 import type { AttachmentOrganizationMode, DeviceInfo, HermesQueueItem, Language, NoteVersionInfo, PluginSettings } from "./types";
@@ -906,8 +907,11 @@ class SyncSettingTab extends PluginSettingTab {
           .setPlaceholder("UUID")
           .setValue(this.plugin.settings.vaultId)
           .onChange(async (value) => {
-            this.plugin.settings.vaultId = value.trim();
+            const reset = applyVaultIdInput(this.plugin.settings, value);
             await this.plugin.saveSettings();
+            if (reset) {
+              new Notice(t(this.plugin.settings.language, "notice.vaultChangedRelogin"));
+            }
           })
       );
 

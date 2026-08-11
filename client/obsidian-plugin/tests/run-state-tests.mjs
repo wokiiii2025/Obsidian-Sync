@@ -5,7 +5,7 @@ import path from "node:path";
 const outdir = path.resolve(".test-dist");
 
 await esbuild.build({
-  entryPoints: ["tests/state.test.ts", "tests/file-policy.test.ts"],
+  entryPoints: ["tests/state.test.ts", "tests/file-policy.test.ts", "tests/settings-auth.test.ts"],
   outdir,
   bundle: true,
   platform: "node",
@@ -18,4 +18,5 @@ await esbuild.build({
 
 await import(pathToFileURL(path.join(outdir, "state.test.mjs")).href);
 await import(pathToFileURL(path.join(outdir, "file-policy.test.mjs")).href);
+await import(pathToFileURL(path.join(outdir, "settings-auth.test.mjs")).href);
 console.log("client tests passed");
