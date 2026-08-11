@@ -5,11 +5,19 @@ function testProtectedPluginFilesAreExcluded() {
   assert.equal(isPathExcluded(".obsidian/plugins/obsidian-zero-knowledge-sync/main.js", ""), true);
   assert.equal(isPathExcluded(".obsidian/plugins/obsidian-zero-knowledge-sync/manifest.json", ""), true);
   assert.equal(isPathExcluded(".obsidian/plugins/obsidian-zero-knowledge-sync/styles.css", ""), true);
+  assert.equal(isPathExcluded(".obsidian/plugins/Obsidian-Zero-Knowledge-Sync/main.js", ""), true);
 }
 
 function testStateAndConflictFilesAreExcluded() {
   assert.equal(isPathExcluded(".obsidian/zero-knowledge-sync-state.json", ""), true);
+  assert.equal(isPathExcluded(".obsidian/zero-knowledge-sync-state.json.bak-20260812-005917", ""), true);
   assert.equal(isPathExcluded(".obsidian-conflicts/example.md-123", ""), true);
+}
+
+function testSystemNoiseFilesAreExcluded() {
+  assert.equal(isPathExcluded(".DS_Store", ""), true);
+  assert.equal(isPathExcluded(".obsidian/.DS_Store", ""), true);
+  assert.equal(isPathExcluded(".obsidian/plugins/.DS_Store", ""), true);
 }
 
 function testUserExclusionsAreRespected() {
@@ -19,4 +27,5 @@ function testUserExclusionsAreRespected() {
 
 testProtectedPluginFilesAreExcluded();
 testStateAndConflictFilesAreExcluded();
+testSystemNoiseFilesAreExcluded();
 testUserExclusionsAreRespected();

@@ -61,6 +61,15 @@ export function isPathExcluded(path: string, exclusions: string): boolean {
   if (isAppleDoublePath(path)) {
     return true;
   }
+  if (isSystemNoisePath(path)) {
+    return true;
+  }
+  if (isProtectedPluginPath(path)) {
+    return true;
+  }
+  if (isSyncStatePath(path)) {
+    return true;
+  }
   const patterns = [...PROTECTED_EXCLUSIONS, ...exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
   return patterns.some((pattern) => {
     if (pattern.endsWith("/**")) {
@@ -80,4 +89,16 @@ export function isManagedAttachmentExtension(extension: string): boolean {
 
 function isAppleDoublePath(path: string): boolean {
   return path.split("/").some((part) => part.startsWith("._"));
+}
+
+function isSystemNoisePath(path: string): boolean {
+  return path.split("/").some((part) => part === ".DS_Store");
+}
+
+function isProtectedPluginPath(path: string): boolean {
+  return path.toLowerCase().startsWith(".obsidian/plugins/obsidian-zero-knowledge-sync/");
+}
+
+function isSyncStatePath(path: string): boolean {
+  return path === ".obsidian/zero-knowledge-sync-state.json" || path.startsWith(".obsidian/zero-knowledge-sync-state.json.");
 }
