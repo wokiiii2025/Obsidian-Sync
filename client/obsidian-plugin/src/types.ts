@@ -8,6 +8,7 @@ export interface SyncStats {
   downloaded: number;
   uploaded: number;
   conflicts: number;
+  pluginFiles: number;
   lastStartedAt: string;
   lastFinishedAt: string;
   lastError: string;
@@ -56,6 +57,8 @@ export interface PluginSettings {
   syncArchives: boolean;
   syncOtherFiles: boolean;
   syncObsidianConfig: boolean;
+  syncPluginDirectories: boolean;
+  pluginDirectories: string;
   manageAttachments: boolean;
   attachmentFolder: string;
   attachmentOrganizationMode: AttachmentOrganizationMode;

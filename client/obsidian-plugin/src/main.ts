@@ -1209,6 +1209,31 @@ class SyncSettingTab extends PluginSettingTab {
     this.addSelectiveToggle(containerEl, "settings.selective.obsidianConfig", "syncObsidianConfig");
 
     new Setting(containerEl)
+      .setName(t(language, "settings.pluginSync.name"))
+      .setDesc(t(language, "settings.pluginSync.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncPluginDirectories)
+          .onChange(async (value) => {
+            this.plugin.settings.syncPluginDirectories = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t(language, "settings.pluginDirectories.name"))
+      .setDesc(t(language, "settings.pluginDirectories.desc"))
+      .addTextArea((text) =>
+        text
+          .setPlaceholder("dataview\ntemplater-obsidian\ncalendar")
+          .setValue(this.plugin.settings.pluginDirectories)
+          .onChange(async (value) => {
+            this.plugin.settings.pluginDirectories = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName(t(language, "settings.exclusions.name"))
       .setDesc(t(language, "settings.exclusions.desc"))
       .addTextArea((text) =>
@@ -1562,7 +1587,7 @@ class SyncSettingTab extends PluginSettingTab {
     });
   }
 
-  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncJson" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles" | "syncObsidianConfig">): void {
+  private addSelectiveToggle(containerEl: HTMLElement, labelKey: string, settingKey: keyof Pick<PluginSettings, "syncMarkdown" | "syncJson" | "syncImages" | "syncDocuments" | "syncAudio" | "syncVideo" | "syncArchives" | "syncOtherFiles" | "syncObsidianConfig" | "syncPluginDirectories">): void {
     const language = this.plugin.settings.language;
     new Setting(containerEl)
       .setName(t(language, labelKey))

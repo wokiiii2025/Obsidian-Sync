@@ -40,6 +40,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncArchives: true,
   syncOtherFiles: true,
   syncObsidianConfig: true,
+  syncPluginDirectories: false,
+  pluginDirectories: "",
   manageAttachments: true,
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     downloaded: 0,
     uploaded: 0,
     conflicts: 0,
+    pluginFiles: 0,
     lastStartedAt: "",
     lastFinishedAt: "",
     lastError: ""

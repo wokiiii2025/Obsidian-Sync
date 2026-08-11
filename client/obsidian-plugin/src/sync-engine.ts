@@ -3,7 +3,7 @@ import { CONFLICT_DIR } from "./defaults";
 import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
-import { isPathExcluded, isPathSyncEnabled } from "./file-policy";
+import { isPathExcluded, isPathSyncEnabled, isPluginDirectoryPath } from "./file-policy";
 import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
@@ -65,6 +65,7 @@ export class SyncEngine {
       this.settings.lastSync = checkpoint || new Date().toISOString();
       this.settings.lastSyncStatus = "success";
       this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length;
+      this.settings.lastSyncStats.pluginFiles = Object.keys(state.notes).filter(isPluginDirectoryPath).length;
       this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
       this.recordSyncHistory("success");
       await saveSyncState(this.vault, state);
@@ -72,7 +73,8 @@ export class SyncEngine {
       new Notice(t(this.settings.language, "notice.syncCompleteStats", {
         uploaded: this.settings.lastSyncStats.uploaded,
         downloaded: this.settings.lastSyncStats.downloaded,
-        conflicts: this.settings.lastSyncStats.conflicts
+        conflicts: this.settings.lastSyncStats.conflicts,
+        pluginFiles: this.settings.lastSyncStats.pluginFiles
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
