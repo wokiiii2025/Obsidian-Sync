@@ -55,7 +55,7 @@ export function isPathSyncEnabled(path: string, extension: string, settings: Plu
     return false;
   }
   if (isPluginDirectoryPath(path)) {
-    return settings.syncPluginDirectories && isAllowedPluginDirectoryPath(path, settings.pluginDirectories);
+    return settings.syncPluginDirectories && !isExcludedPluginDirectoryPath(path, settings.excludedPluginDirectories);
   }
   if (path === ".obsidian" || path.startsWith(".obsidian/")) {
     return settings.syncObsidianConfig;
@@ -113,12 +113,12 @@ function isSyncStatePath(path: string): boolean {
   return path === ".obsidian/zero-knowledge-sync-state.json" || path.startsWith(".obsidian/zero-knowledge-sync-state.json.");
 }
 
-function isAllowedPluginDirectoryPath(path: string, pluginDirectories: string): boolean {
+function isExcludedPluginDirectoryPath(path: string, excludedPluginDirectories: string): boolean {
   const pluginId = pluginIdFromPath(path);
   if (!pluginId || pluginId === "obsidian-zero-knowledge-sync") {
-    return false;
+    return true;
   }
-  return parsePluginDirectoryAllowList(pluginDirectories).has(pluginId);
+  return parsePluginDirectoryList(excludedPluginDirectories).has(pluginId);
 }
 
 function pluginIdFromPath(path: string): string {
@@ -129,7 +129,7 @@ function pluginIdFromPath(path: string): string {
   return parts[2].trim().toLowerCase();
 }
 
-function parsePluginDirectoryAllowList(pluginDirectories: string): Set<string> {
+function parsePluginDirectoryList(pluginDirectories: string): Set<string> {
   return new Set(
     pluginDirectories
       .split(/\r?\n|,/)

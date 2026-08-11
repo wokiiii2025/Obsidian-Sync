@@ -36,20 +36,30 @@ function testPluginDirectoriesAreDisabledByDefault() {
   assert.equal(isPathSyncEnabled(".obsidian/plugins/dataview/main.js", "js", settings), false);
 }
 
-function testWhitelistedPluginDirectoriesCanSync() {
+function testPluginDirectoriesSyncAllWhenEnabled() {
   const settings = settingsWith({
     syncPluginDirectories: true,
-    pluginDirectories: "dataview\ncalendar"
+    excludedPluginDirectories: ""
   });
   assert.equal(isPathSyncEnabled(".obsidian/plugins/dataview/main.js", "js", settings), true);
   assert.equal(isPathSyncEnabled(".obsidian/plugins/calendar/data.json", "json", settings), true);
-  assert.equal(isPathSyncEnabled(".obsidian/plugins/templater-obsidian/main.js", "js", settings), false);
+  assert.equal(isPathSyncEnabled(".obsidian/plugins/templater-obsidian/main.js", "js", settings), true);
+}
+
+function testPluginDirectoriesCanBeExcluded() {
+  const settings = settingsWith({
+    syncPluginDirectories: true,
+    excludedPluginDirectories: "dataview\ncalendar"
+  });
+  assert.equal(isPathSyncEnabled(".obsidian/plugins/dataview/main.js", "js", settings), false);
+  assert.equal(isPathSyncEnabled(".obsidian/plugins/calendar/data.json", "json", settings), false);
+  assert.equal(isPathSyncEnabled(".obsidian/plugins/templater-obsidian/main.js", "js", settings), true);
 }
 
 function testSyncPluginItselfNeverSyncs() {
   const settings = settingsWith({
     syncPluginDirectories: true,
-    pluginDirectories: "obsidian-zero-knowledge-sync\nObsidian-Zero-Knowledge-Sync"
+    excludedPluginDirectories: ""
   });
   assert.equal(isPathExcluded(".obsidian/plugins/Obsidian-Zero-Knowledge-Sync/main.js", ""), true);
   assert.equal(isPathSyncEnabled(".obsidian/plugins/Obsidian-Zero-Knowledge-Sync/main.js", "js", settings), false);
@@ -60,5 +70,6 @@ testStateAndConflictFilesAreExcluded();
 testSystemNoiseFilesAreExcluded();
 testUserExclusionsAreRespected();
 testPluginDirectoriesAreDisabledByDefault();
-testWhitelistedPluginDirectoriesCanSync();
+testPluginDirectoriesSyncAllWhenEnabled();
+testPluginDirectoriesCanBeExcluded();
 testSyncPluginItselfNeverSyncs();

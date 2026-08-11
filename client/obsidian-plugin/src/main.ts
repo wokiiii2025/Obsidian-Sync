@@ -132,8 +132,13 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
     let changed = false;
+    if (loaded && typeof (loaded as { pluginDirectories?: unknown }).pluginDirectories === "string" && !this.settings.excludedPluginDirectories) {
+      this.settings.excludedPluginDirectories = "";
+      changed = true;
+    }
     if (!this.settings.clientInstanceId) {
       this.settings.clientInstanceId = generateClientInstanceId();
       changed = true;
@@ -1226,9 +1231,9 @@ class SyncSettingTab extends PluginSettingTab {
       .addTextArea((text) =>
         text
           .setPlaceholder("dataview\ntemplater-obsidian\ncalendar")
-          .setValue(this.plugin.settings.pluginDirectories)
+          .setValue(this.plugin.settings.excludedPluginDirectories)
           .onChange(async (value) => {
-            this.plugin.settings.pluginDirectories = value;
+            this.plugin.settings.excludedPluginDirectories = value;
             await this.plugin.saveSettings();
           })
       );

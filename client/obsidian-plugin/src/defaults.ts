@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   syncOtherFiles: true,
   syncObsidianConfig: true,
   syncPluginDirectories: false,
-  pluginDirectories: "",
+  excludedPluginDirectories: "",
   manageAttachments: true,
   attachmentFolder: "Attachments",
   attachmentOrganizationMode: "type-date",

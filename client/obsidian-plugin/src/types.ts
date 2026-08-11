@@ -58,7 +58,7 @@ export interface PluginSettings {
   syncOtherFiles: boolean;
   syncObsidianConfig: boolean;
   syncPluginDirectories: boolean;
-  pluginDirectories: string;
+  excludedPluginDirectories: string;
   manageAttachments: boolean;
   attachmentFolder: string;
   attachmentOrganizationMode: AttachmentOrganizationMode;
