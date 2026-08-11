@@ -1,4 +1,5 @@
 import type { PluginSettings } from "./types";
+import { PROTECTED_EXCLUSIONS } from "./defaults";
 
 export type FileCategory = "markdown" | "data" | "images" | "documents" | "audio" | "video" | "archives" | "other";
 
@@ -56,7 +57,27 @@ export function isPathSyncEnabled(path: string, extension: string, settings: Plu
   return isFileTypeSyncEnabled(extension, settings);
 }
 
+export function isPathExcluded(path: string, exclusions: string): boolean {
+  if (isAppleDoublePath(path)) {
+    return true;
+  }
+  const patterns = [...PROTECTED_EXCLUSIONS, ...exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
+  return patterns.some((pattern) => {
+    if (pattern.endsWith("/**")) {
+      return path.startsWith(pattern.slice(0, -3));
+    }
+    if (pattern === "._*" || pattern === "**/._*") {
+      return isAppleDoublePath(path);
+    }
+    return path === pattern || path.startsWith(`${pattern}/`);
+  });
+}
+
 export function isManagedAttachmentExtension(extension: string): boolean {
   const category = fileCategory(extension);
   return !["markdown", "data"].includes(category);
+}
+
+function isAppleDoublePath(path: string): boolean {
+  return path.split("/").some((part) => part.startsWith("._"));
 }

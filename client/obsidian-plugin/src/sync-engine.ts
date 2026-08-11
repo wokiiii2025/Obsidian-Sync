@@ -1,9 +1,9 @@
 import { Notice, TFile, Vault } from "obsidian";
-import { CONFLICT_DIR, PROTECTED_EXCLUSIONS } from "./defaults";
+import { CONFLICT_DIR } from "./defaults";
 import { CryptoService } from "./crypto";
 import { t } from "./i18n";
 import { SyncApi } from "./api";
-import { isPathSyncEnabled } from "./file-policy";
+import { isPathExcluded, isPathSyncEnabled } from "./file-policy";
 import { loadSyncState, saveSyncState } from "./state";
 import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
@@ -51,7 +51,15 @@ export class SyncEngine {
     this.settings.lastSyncStats.conflicts = 0;
     await this.saveSettings();
     try {
-      const state = await loadSyncState(this.vault);
+      let recoveredState = false;
+      const state = await loadSyncState(this.vault, (info) => {
+        recoveredState = true;
+        new Notice(t(this.settings.language, "notice.stateRecovered", { path: info.backupPath }));
+      });
+      if (recoveredState) {
+        this.settings.lastSync = "";
+      }
+      this.pruneExcludedStateEntries(state);
       const checkpoint = await this.applyRemoteChanges(state);
       await this.pushLocalChanges(state);
       this.settings.lastSync = checkpoint || new Date().toISOString();
@@ -114,7 +122,7 @@ export class SyncEngine {
       return;
     }
     const decrypted = await this.crypto.decryptRemoteFile(change.path_hash, change.encrypted_path, change.encrypted_content, change.encrypted_dek);
-    if (!isPathSyncEnabled(decrypted.path, extensionForPath(decrypted.path), this.settings)) {
+    if (this.isExcluded(decrypted.path) || !isPathSyncEnabled(decrypted.path, extensionForPath(decrypted.path), this.settings)) {
       return;
     }
     const modifiedTime = await this.writeRemoteFile(decrypted.path, decrypted.content);
@@ -128,6 +136,10 @@ export class SyncEngine {
   private async applyRemoteDelete(change: RemoteChange, state: SyncState): Promise<void> {
     const path = Object.keys(state.notes).find((candidate) => state.notes[candidate].pathHash === change.path_hash);
     if (!path) {
+      return;
+    }
+    if (this.isExcluded(path)) {
+      delete state.notes[path];
       return;
     }
     if (!isPathSyncEnabled(path, extensionForPath(path), this.settings)) {
@@ -224,23 +236,15 @@ export class SyncEngine {
   }
 
   private isExcluded(path: string): boolean {
-    if (this.isAppleDoublePath(path)) {
-      return true;
-    }
-    const patterns = [...PROTECTED_EXCLUSIONS, ...this.settings.exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
-    return patterns.some((pattern) => {
-      if (pattern.endsWith("/**")) {
-        return path.startsWith(pattern.slice(0, -3));
-      }
-      if (pattern === "._*" || pattern === "**/._*") {
-        return this.isAppleDoublePath(path);
-      }
-      return path === pattern || path.startsWith(`${pattern}/`);
-    });
+    return isPathExcluded(path, this.settings.exclusions);
   }
 
-  private isAppleDoublePath(path: string): boolean {
-    return path.split("/").some((part) => part.startsWith("._"));
+  private pruneExcludedStateEntries(state: SyncState): void {
+    for (const path of Object.keys(state.notes)) {
+      if (this.isExcluded(path)) {
+        delete state.notes[path];
+      }
+    }
   }
 
   private async ensureParentFolder(path: string): Promise<void> {
