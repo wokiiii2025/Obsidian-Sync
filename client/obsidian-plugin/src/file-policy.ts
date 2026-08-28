@@ -54,6 +54,9 @@ export function isPathSyncEnabled(path: string, extension: string, settings: Plu
   if (isProtectedPluginPath(path)) {
     return false;
   }
+  if (isDeviceSpecificConfigPath(path)) {
+    return false;
+  }
   if (isPluginDirectoryPath(path)) {
     return settings.syncPluginDirectories && !isExcludedPluginDirectoryPath(path, settings.excludedPluginDirectories);
   }
@@ -78,6 +81,9 @@ export function isPathExcluded(path: string, exclusions: string): boolean {
     return true;
   }
   if (isSyncStatePath(path)) {
+    return true;
+  }
+  if (isDeviceSpecificConfigPath(path)) {
     return true;
   }
   const patterns = [...PROTECTED_EXCLUSIONS, ...exclusions.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)];
@@ -111,6 +117,10 @@ function isProtectedPluginPath(path: string): boolean {
 
 function isSyncStatePath(path: string): boolean {
   return path === ".obsidian/zero-knowledge-sync-state.json" || path.startsWith(".obsidian/zero-knowledge-sync-state.json.");
+}
+
+function isDeviceSpecificConfigPath(path: string): boolean {
+  return path === ".obsidian/workspace.json" || path === ".obsidian/workspace-mobile.json";
 }
 
 function isExcludedPluginDirectoryPath(path: string, excludedPluginDirectories: string): boolean {
