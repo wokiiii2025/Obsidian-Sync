@@ -120,7 +120,14 @@ function isSyncStatePath(path: string): boolean {
 }
 
 function isDeviceSpecificConfigPath(path: string): boolean {
-  return path === ".obsidian/workspace.json" || path === ".obsidian/workspace-mobile.json";
+  return [
+    ".obsidian/workspace.json",
+    ".obsidian/workspace-mobile.json",
+    ".obsidian/appearance.json",
+    ".obsidian/app.json",
+    ".obsidian/core-plugins.json",
+    ".obsidian/community-plugins.json"
+  ].includes(path);
 }
 
 function isExcludedPluginDirectoryPath(path: string, excludedPluginDirectories: string): boolean {
