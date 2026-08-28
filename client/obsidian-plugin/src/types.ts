@@ -30,6 +30,7 @@ export interface PluginSettings {
   vaultId: string;
   deviceId: string;
   clientInstanceId: string;
+  clientInstancePlatform: string;
   token: string;
   rememberUnlockKey: boolean;
   savedUnlockKey: string;

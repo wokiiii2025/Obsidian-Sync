@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     maintenance_retention_days: int = 30
     maintenance_keep_versions: int = 50
     maintenance_prune_sync_log: bool = True
+    maintenance_revoke_inactive_days: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

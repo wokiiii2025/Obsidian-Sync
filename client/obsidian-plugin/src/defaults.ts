@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   vaultId: "",
   deviceId: "",
   clientInstanceId: "",
+  clientInstancePlatform: "",
   token: "",
   rememberUnlockKey: false,
   savedUnlockKey: "",

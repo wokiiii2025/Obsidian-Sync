@@ -135,6 +135,7 @@ async def run_maintenance_now(settings: Settings = Depends(get_settings)) -> dic
         retention_days=settings.maintenance_retention_days,
         keep_versions=settings.maintenance_keep_versions,
         prune_sync_log=settings.maintenance_prune_sync_log,
+        revoke_inactive_days=settings.maintenance_revoke_inactive_days,
     )
 
 

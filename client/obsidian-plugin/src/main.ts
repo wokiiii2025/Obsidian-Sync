@@ -141,6 +141,15 @@ export default class ZeroKnowledgeSyncPlugin extends Plugin {
     }
     if (!this.settings.clientInstanceId) {
       this.settings.clientInstanceId = generateClientInstanceId();
+      this.settings.clientInstancePlatform = platformLabel();
+      changed = true;
+    } else if (this.settings.clientInstancePlatform && this.settings.clientInstancePlatform !== platformLabel()) {
+      // 检测到库被复制到不同平台设备: 重新生成独立身份并清除旧登录, 避免多设备共用同一 deviceId
+      this.settings.clientInstancePlatform = platformLabel();
+      this.settings.clientInstanceId = generateClientInstanceId();
+      this.settings.deviceId = "";
+      this.settings.token = "";
+      this.settings.lastSync = "";
       changed = true;
     }
     if (this.settings.exclusions === LEGACY_DEFAULT_EXCLUSIONS) {
@@ -1936,14 +1945,14 @@ function platformLabel(): string {
   if (platform.includes("mac") || userAgent.includes("mac os")) {
     return "macOS";
   }
-  if (platform.includes("linux") || userAgent.includes("linux")) {
-    return "Linux";
-  }
   if (userAgent.includes("iphone") || userAgent.includes("ipad")) {
     return "iOS";
   }
   if (userAgent.includes("android")) {
     return "Android";
+  }
+  if (platform.includes("linux") || userAgent.includes("linux")) {
+    return "Linux";
   }
   return "Obsidian";
 }
