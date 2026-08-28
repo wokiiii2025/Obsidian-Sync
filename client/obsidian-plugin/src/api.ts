@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { requestUrl, type RequestUrlParam } from "obsidian";
 import type { ChangesPage, DeviceInfo, HermesQueueItem, NoteVersionInfo, NoteVersionPayload, PushChange, PushResponse } from "./types";
 
 interface ChangePageOptions {
@@ -93,15 +93,34 @@ export class SyncApi {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await requestUrl({
-      url: `${this.getServerUrl().replace(/\/$/, "")}${path}`,
-      method: init.method ?? "GET",
-      body: typeof init.body === "string" ? init.body : undefined,
-      headers
-    });
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Sync API ${response.status}: ${response.text}`);
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await requestUrl({
+          url: `${this.getServerUrl().replace(/\/$/, "")}${path}`,
+          method: init.method ?? "GET",
+          body: typeof init.body === "string" ? init.body : undefined,
+          headers,
+          timeout: 90000
+        } as RequestUrlParam & { timeout: number });
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`Sync API ${response.status}: ${response.text}`);
+        }
+        return response.json as T;
+      } catch (error) {
+        lastError = error;
+        if (
+          error instanceof Error &&
+          error.message &&
+          error.message.indexOf("Sync API ") !== 0 &&
+          attempt < 2
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 1500 * Math.pow(2, attempt)));
+          continue;
+        }
+        throw error;
+      }
     }
-    return response.json as T;
+    throw lastError;
   }
 }

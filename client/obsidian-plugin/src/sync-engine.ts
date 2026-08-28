@@ -5,10 +5,10 @@ import { t } from "./i18n";
 import { SyncApi } from "./api";
 import { isPathExcluded, isPathSyncEnabled, isPluginDirectoryPath } from "./file-policy";
 import { loadSyncState, saveSyncState } from "./state";
-import type { PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
+import type { ConflictChange, PluginSettings, PushChange, RemoteChange, SyncState, SyncStatus } from "./types";
 
 const MAX_SYNC_HISTORY = 20;
-const REMOTE_CHANGE_PAGE_SIZE = 500;
+const REMOTE_CHANGE_PAGE_SIZE = 50;
 
 interface LocalSyncFile {
   path: string;
@@ -20,6 +20,7 @@ interface LocalSyncFile {
 
 export class SyncEngine {
   private running = false;
+  private readonly downloadedPaths = new Set<string>();
 
   constructor(
     private readonly vault: Vault,
@@ -45,12 +46,14 @@ export class SyncEngine {
     }
 
     this.running = true;
+    this.downloadedPaths.clear();
     this.settings.lastSyncStatus = "running";
     this.settings.lastSyncStats.downloaded = 0;
     this.settings.lastSyncStats.uploaded = 0;
     this.settings.lastSyncStats.conflicts = 0;
     await this.saveSettings();
     try {
+      await this.cleanupLocalDuplicates();
       let recoveredState = false;
       const state = await loadSyncState(this.vault, (info) => {
         recoveredState = true;
@@ -64,8 +67,8 @@ export class SyncEngine {
       await this.pushLocalChanges(state);
       this.settings.lastSync = checkpoint || new Date().toISOString();
       this.settings.lastSyncStatus = "success";
-      this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length;
       this.settings.lastSyncStats.pluginFiles = Object.keys(state.notes).filter(isPluginDirectoryPath).length;
+      this.settings.lastSyncStats.trackedNotes = Object.keys(state.notes).length - this.settings.lastSyncStats.pluginFiles;
       this.settings.lastSyncStats.lastFinishedAt = this.settings.lastSync;
       this.recordSyncHistory("success");
       await saveSyncState(this.vault, state);
@@ -133,6 +136,7 @@ export class SyncEngine {
       versionVector: change.version_vector,
       modifiedTime
     };
+    this.downloadedPaths.add(decrypted.path);
   }
 
   private async applyRemoteDelete(change: RemoteChange, state: SyncState): Promise<void> {
@@ -162,7 +166,7 @@ export class SyncEngine {
 
     for (const file of files) {
       const tracked = state.notes[file.path];
-      if (tracked && tracked.modifiedTime >= file.mtime) {
+      if ((tracked && tracked.modifiedTime >= file.mtime) || this.downloadedPaths.has(file.path)) {
         continue;
       }
       const content = new Uint8Array(file.file ? await this.vault.readBinary(file.file) : await this.vault.adapter.readBinary(file.path));
@@ -212,10 +216,17 @@ export class SyncEngine {
       return;
     }
 
-    const response = await this.api.push(changes);
-    this.settings.lastSyncStats.uploaded = response.accepted.length;
-    this.settings.lastSyncStats.conflicts = response.conflicts.length;
-    for (const conflict of response.conflicts) {
+    const allConflicts: ConflictChange[] = [];
+    let uploaded = 0;
+    for (let i = 0; i < changes.length; i += 10) {
+      const chunk = changes.slice(i, i + 10);
+      const response = await this.api.push(chunk);
+      uploaded += response.accepted.length;
+      allConflicts.push(...response.conflicts);
+    }
+    this.settings.lastSyncStats.uploaded = uploaded;
+    this.settings.lastSyncStats.conflicts = allConflicts.length;
+    for (const conflict of allConflicts) {
       if (!conflict.encrypted_content || !conflict.encrypted_dek) {
         continue;
       }
@@ -232,8 +243,71 @@ export class SyncEngine {
         ...(this.settings.conflictRecords ?? [])
       ].slice(0, 50);
     }
-    if (response.conflicts.length > 0) {
-      new Notice(t(this.settings.language, "notice.conflicts", { count: response.conflicts.length }));
+    if (allConflicts.length > 0) {
+      new Notice(t(this.settings.language, "notice.conflicts", { count: allConflicts.length }));
+    }
+  }
+
+  private async cleanupLocalDuplicates(): Promise<void> {
+    try {
+      const files = await this.listLocalSyncFiles();
+      const bySize = new Map<number, LocalSyncFile[]>();
+      for (const file of files) {
+        if (file.extension.toLowerCase() === "md" || this.isExcluded(file.path)) {
+          continue;
+        }
+        if (!bySize.has(file.size)) {
+          bySize.set(file.size, []);
+        }
+        bySize.get(file.size)!.push(file);
+      }
+      let removed = 0;
+      for (const sizeFiles of bySize.values()) {
+        if (sizeFiles.length < 2) {
+          continue;
+        }
+        sizeFiles.sort((a, b) => a.path.length - b.path.length);
+        const seen: { bytes: Uint8Array }[] = [];
+        for (const file of sizeFiles) {
+          const content = new Uint8Array(file.file ? await this.vault.readBinary(file.file) : await this.vault.adapter.readBinary(file.path));
+          let duplicate = false;
+          for (const candidate of seen) {
+            if (candidate.bytes.length !== content.length) {
+              continue;
+            }
+            let same = true;
+            for (let i = 0; i < content.length; i++) {
+              if (candidate.bytes[i] !== content[i]) {
+                same = false;
+                break;
+              }
+            }
+            if (same) {
+              duplicate = true;
+              break;
+            }
+          }
+          if (duplicate) {
+            removed++;
+            try {
+              if (file.file) {
+                await this.vault.trash(file.file, true);
+              } else {
+                await this.vault.adapter.remove(file.path);
+              }
+            } catch (error) {
+              // 忽略单个文件删除失败
+            }
+          } else {
+            seen.push({ bytes: new Uint8Array(content) });
+          }
+        }
+      }
+      if (removed > 0) {
+        new Notice(`已自动清理 ${removed} 个重复附件`);
+      }
+    } catch (error) {
+      // 清理失败不阻断同步
     }
   }
 
