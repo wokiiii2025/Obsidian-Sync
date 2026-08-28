@@ -18,6 +18,7 @@ from sqlalchemy import func, select, text
 
 from app.config import Settings, get_settings
 from app.database import SessionLocal
+from app.maintenance import prune_expired_data
 from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 
 router = APIRouter()
@@ -125,6 +126,16 @@ async def list_backups(settings: Settings = Depends(get_settings)) -> dict:
 async def run_backup_now(settings: Settings = Depends(get_settings)) -> dict:
     result = await run_backup(settings)
     return asdict(result)
+
+
+@router.post("/admin/api/maintenance/run", dependencies=[Depends(require_admin_token)])
+async def run_maintenance_now(settings: Settings = Depends(get_settings)) -> dict:
+    return await prune_expired_data(
+        SessionLocal,
+        retention_days=settings.maintenance_retention_days,
+        keep_versions=settings.maintenance_keep_versions,
+        prune_sync_log=settings.maintenance_prune_sync_log,
+    )
 
 
 @router.get("/admin/api/google-drive/status", dependencies=[Depends(require_admin_token)])

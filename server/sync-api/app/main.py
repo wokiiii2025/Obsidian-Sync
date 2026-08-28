@@ -14,6 +14,7 @@ from app.admin import router as admin_router, run_backup_loop
 from app.config import get_settings
 from app.database import SessionLocal, engine, get_session
 from app.hermes_agent import run_hermes_agent_loop
+from app.maintenance import run_maintenance_loop
 from app.hermes_tools import router as hermes_tools_router
 from app.models import Device, HermesQueue, Note, NoteVersion, SyncLog, Vault
 from app.schemas import (
@@ -49,6 +50,7 @@ from app.sync import VectorOrder, compare_vectors
 app = FastAPI(title="Obsidian Sync API", version="0.1.0")
 hermes_agent_task: asyncio.Task | None = None
 backup_task: asyncio.Task | None = None
+maintenance_task: asyncio.Task | None = None
 logger = logging.getLogger("obsidian-sync-api")
 app.add_middleware(
     CORSMiddleware,
@@ -62,7 +64,7 @@ app.include_router(hermes_tools_router)
 
 @app.on_event("startup")
 async def migrate_schema() -> None:
-    global hermes_agent_task, backup_task
+    global hermes_agent_task, backup_task, maintenance_task
     async with engine.begin() as conn:
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS client_instance_id TEXT"))
@@ -105,6 +107,8 @@ async def migrate_schema() -> None:
         logger.warning("Hermes Agent enabled but HERMES_AGENT_VAULT_ID or HERMES_AGENT_VAULT_PASSWORD is missing.")
     if settings.admin_backup_enabled:
         backup_task = asyncio.create_task(run_backup_loop(settings))
+    if settings.maintenance_enabled:
+        maintenance_task = asyncio.create_task(run_maintenance_loop(settings, SessionLocal))
 
 
 @app.on_event("shutdown")
@@ -117,6 +121,10 @@ async def stop_hermes_agent() -> None:
         backup_task.cancel()
         with suppress(asyncio.CancelledError):
             await backup_task
+    if maintenance_task:
+        maintenance_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await maintenance_task
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -299,6 +307,11 @@ async def changes(
 @app.post("/api/v1/sync/push", response_model=PushResponse)
 async def push(payload: PushRequest, auth: Annotated[tuple, Depends(current_auth)]) -> PushResponse:
     vault_id, device_id, session = auth
+    if len(payload.changes) > 200:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many changes in one push: {len(payload.changes)}. Split into batches of at most 200.",
+        )
     accepted: list[AcceptedChange] = []
     conflicts: list[ConflictChange] = []
 

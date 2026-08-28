@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     admin_google_token_file: str = "/app/backups/google-drive-token.json"
     admin_google_drive_folder_id: str = ""
     admin_google_drive_folder_name: str = "Obsidian Sync Backups"
+    maintenance_enabled: bool = True
+    maintenance_interval_hours: int = 24
+    maintenance_retention_days: int = 30
+    maintenance_keep_versions: int = 50
+    maintenance_prune_sync_log: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
