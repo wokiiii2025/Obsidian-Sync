@@ -6,5 +6,5 @@ httpx>=0.28,<1
 passlib[argon2]>=1.7,<2
 PyJWT[crypto]>=2.10,<3
 pydantic-settings>=2.5,<3
-SQLAlchemy>=2.0,<3
+SQLAlchemy[asyncio]>=2.0,<2.1
 uvicorn[standard]>=0.31,<1
