@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import router as admin_router, run_backup_loop
 from app.config import get_settings
-from app.database import SessionLocal, engine, get_session
+from app.database import Base, SessionLocal, engine, get_session
 from app.hermes_agent import run_hermes_agent_loop
 from app.maintenance import run_maintenance_loop
 from app.hermes_tools import router as hermes_tools_router
@@ -66,6 +66,9 @@ app.include_router(hermes_tools_router)
 async def migrate_schema() -> None:
     global hermes_agent_task, backup_task, maintenance_task
     async with engine.begin() as conn:
+        # 全新空库时表还不存在，先按 ORM 元数据幂等建表，再执行增量迁移。
+        # 已有库 create_all 会跳过已存在的表，不影响历史数据。
+        await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ"))
         await conn.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS client_instance_id TEXT"))
         await conn.execute(

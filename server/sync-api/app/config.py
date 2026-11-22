@@ -43,12 +43,18 @@ class Settings(BaseSettings):
     admin_google_token_file: str = "/app/backups/google-drive-token.json"
     admin_google_drive_folder_id: str = ""
     admin_google_drive_folder_name: str = "Obsidian Sync Backups"
+    # 维护任务：默认只做"安全回收"，任何会丢数据/断设备的动作都必须显式开启。
     maintenance_enabled: bool = True
     maintenance_interval_hours: int = 24
+    # 墓碑回收：软删除超过该天数的笔记硬删除（笔记已被用户删除，属安全回收）。
     maintenance_retention_days: int = 30
-    maintenance_keep_versions: int = 50
-    maintenance_prune_sync_log: bool = True
-    maintenance_revoke_inactive_days: int = 30
+    # 版本历史保留条数；0 = 不裁剪（默认，避免删掉用户的版本历史）。
+    maintenance_keep_versions: int = 0
+    # 同步日志裁剪；默认关闭。开启前提：客户端支持"日志缺口 -> 全量重同步"，
+    # 否则离线超过 retention_days 的设备会漏掉删除事件，甚至把已删笔记重新推回。
+    maintenance_prune_sync_log: bool = False
+    # 自动吊销长期未活动设备的天数；0 = 不自动吊销（默认，避免误杀备用设备）。
+    maintenance_revoke_inactive_days: int = 0
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
